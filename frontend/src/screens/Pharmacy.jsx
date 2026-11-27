@@ -1,31 +1,33 @@
 import React, { useState, useEffect } from 'react'
 import {
-  Pill,
   Plus,
   CheckCircle,
   AlertTriangle,
   X,
-  Search,
   Check,
-  Clock,
-  ShieldAlert
+  Search,
 } from 'lucide-react'
 import {
   getPrescriptions,
   createPrescription,
   dispensePrescription,
   getPatients,
-  getEncounters
+  getEncounters,
+  getInpatientMedicationPlans
 } from '../api'
 
 export default function Pharmacy({ me }) {
   const [prescriptions, setPrescriptions] = useState([])
+  const [inpatientPlans, setInpatientPlans] = useState([])
   const [patients, setPatients] = useState([])
   const [encounters, setEncounters] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
+  const [patientSearch, setPatientSearch] = useState('')
+  const [dateFilter, setDateFilter] = useState('')
+  const [activeSection, setActiveSection] = useState('opd')
 
   // Modal to authorize prescription
   const [showModal, setShowModal] = useState(false)
@@ -46,13 +48,15 @@ export default function Pharmacy({ me }) {
     setLoading(true)
     setError('')
     try {
-      const [pRes, ptRes, eRes] = await Promise.all([
+      const [pRes, ptRes, eRes, ipdRes] = await Promise.all([
         getPrescriptions(),
         getPatients().catch(() => ({ data: [] })),
-        getEncounters().catch(() => ({ data: [] }))
+        getEncounters().catch(() => ({ data: [] })),
+        getInpatientMedicationPlans()
       ])
 
       setPrescriptions(pRes.data?.results || pRes.data || [])
+      setInpatientPlans(ipdRes.data?.results || ipdRes.data || [])
       setPatients(ptRes.data?.results || ptRes.data || [])
       setEncounters(eRes.data?.results || eRes.data || [])
     } catch (err) {
@@ -78,7 +82,7 @@ export default function Pharmacy({ me }) {
       setShowModal(false)
       loadData()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Only authorized clinicians can prescribe medication.')
+      setError(err.response?.data?.detail || JSON.stringify(err.response?.data || 'Failed to authorize prescription.'))
     } finally {
       setSubmitting(false)
     }
@@ -96,22 +100,36 @@ export default function Pharmacy({ me }) {
   }
 
   const role = me?.role || 'admin'
-  const canPrescribe = ['clinician', 'admin'].includes(role)
+  const canPrescribe = role === 'admin'
   const canDispense = ['pharmacist', 'admin'].includes(role)
 
   const filtered = filterStatus
     ? prescriptions.filter((p) => p.status === filterStatus)
     : prescriptions
+  const searchTerm = patientSearch.trim().toLowerCase()
+  const sectionPrescriptions = activeSection === 'opd' ? filtered : inpatientPlans
+  const visiblePrescriptions = sectionPrescriptions.filter((rx) => {
+    const patientId = activeSection === 'ipd' ? rx.patient_mrn : rx.patient
+    const patient = patients.find((item) =>
+      item.id === patientId || (activeSection === 'ipd' && item.medical_record_number === patientId)
+    )
+    const patientDetails = activeSection === 'ipd'
+      ? `${rx.patient_name || ''} ${rx.patient_mrn || ''} ${patient?.id || ''}`
+      : `${patient?.first_name || ''} ${patient?.last_name || ''} ${patient?.medical_record_number || ''} ${patientId || ''}`
+    const timestamp = new Date(rx.created_at)
+    const localDate = Number.isNaN(timestamp.getTime())
+      ? ''
+      : `${timestamp.getFullYear()}-${String(timestamp.getMonth() + 1).padStart(2, '0')}-${String(timestamp.getDate()).padStart(2, '0')}`
+
+    return (!searchTerm || patientDetails.toLowerCase().includes(searchTerm))
+      && (!dateFilter || localDate === dateFilter)
+  })
 
   return (
     <div className="pharmacy-screen">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">MODULE F07</span>
-          <h1>Clinical Pharmacy & Medication Dispensing</h1>
-          <p style={{ color: 'var(--muted)', fontSize: '13px' }}>
-            Simulated medication orders, clinician e-prescribing authorization, dosage instructions, and pharmacist dispensing verification.
-          </p>
+          <h1>Pharmacy</h1>
         </div>
         <div className="page-actions">
           {canPrescribe && (
@@ -138,24 +156,43 @@ export default function Pharmacy({ me }) {
         </div>
       )}
 
-      <div className="notice" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <ShieldAlert size={18} color="#92400e" />
-        <div>
-          <strong>SIMULATED PHARMACY WORKFLOW:</strong> Clinicians authorize medication orders; pharmacists verify and record dispensing. Role boundaries strictly enforced server-side.
-        </div>
-      </div>
-
       {/* Toolbar */}
+      <div className="tabs pharmacy-tabs" role="tablist" aria-label="Prescription patient type">
+        <button type="button" className={`tab-btn ${activeSection === 'opd' ? 'active' : ''}`} onClick={() => setActiveSection('opd')}>
+          OPD prescriptions ({prescriptions.length})
+        </button>
+        <button type="button" className={`tab-btn ${activeSection === 'ipd' ? 'active' : ''}`} onClick={() => setActiveSection('ipd')}>
+          IPD medication plans ({inpatientPlans.length})
+        </button>
+      </div>
       <div className="toolbar">
-        <select
+        <div className="toolbar-search">
+          <Search size={16} />
+          <input
+            aria-label="Search pharmacy patients"
+            placeholder="Search patient name or ID"
+            value={patientSearch}
+            onChange={(e) => setPatientSearch(e.target.value)}
+          />
+        </div>
+        <input
           className="filter-select"
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-        >
-          <option value="">All Statuses ({prescriptions.length})</option>
-          <option value="authorized">Authorized / Pending Dispensing</option>
-          <option value="dispensed">Dispensed & Fulfilled</option>
-        </select>
+          type="date"
+          aria-label="Filter pharmacy by date"
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+        />
+        {activeSection === 'opd' && (
+          <select
+            className="filter-select"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+          >
+            <option value="">All Statuses ({prescriptions.length})</option>
+            <option value="authorized">Authorized / Pending Dispensing</option>
+            <option value="dispensed">Dispensed & Fulfilled</option>
+          </select>
+        )}
         <button className="btn btn-secondary" onClick={loadData}>
           Refresh
         </button>
@@ -164,14 +201,14 @@ export default function Pharmacy({ me }) {
       {/* Prescriptions Table */}
       <div className="panel">
         <div className="panel-header">
-          <h3>Prescriptions Queue</h3>
+          <h3>{activeSection === 'ipd' ? 'Inpatient medication plans' : 'OPD prescriptions'}</h3>
         </div>
         <div className="table-wrap">
           {loading ? (
             <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>
               Loading pharmacy orders...
             </div>
-          ) : filtered.length === 0 ? (
+          ) : visiblePrescriptions.length === 0 ? (
             <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>
               No prescriptions found for the selected filter.
             </div>
@@ -189,9 +226,14 @@ export default function Pharmacy({ me }) {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((rx) => {
-                  const pt = patients.find((p) => p.id === rx.patient)
-                  const ptName = pt ? `${pt.first_name} ${pt.last_name}` : `Patient ${rx.patient?.slice ? rx.patient.slice(0, 8) : rx.patient}`
+                {visiblePrescriptions.map((rx) => {
+                  const patientId = activeSection === 'ipd' ? null : rx.patient
+                  const pt = patients.find((p) => p.id === patientId)
+                  const ptName = activeSection === 'ipd'
+                    ? `${rx.patient_name || 'Inpatient'}${rx.ward_name ? ` · ${rx.ward_name}` : ''}`
+                    : pt
+                      ? `${pt.first_name} ${pt.last_name}`
+                      : `Patient ${patientId?.slice ? patientId.slice(0, 8) : patientId}`
                   return (
                     <tr key={rx.id}>
                       <td>
@@ -210,18 +252,21 @@ export default function Pharmacy({ me }) {
                         <span style={{ fontWeight: 600 }}>{rx.dosage}</span>
                       </td>
                       <td style={{ fontSize: '12px', color: 'var(--muted)', maxWidth: '240px' }}>
-                        {rx.instructions || 'Standard dosing schedule.'}
+                        {activeSection === 'ipd' && <strong style={{ display: 'block', marginBottom: '3px' }}>Prescribed by {rx.prescribed_by_name}</strong>}
+                        {rx.instructions || (activeSection === 'ipd' ? '—' : 'Standard dosing schedule.')}
                       </td>
                       <td>
-                        <span className={`badge badge-${rx.status}`}>{rx.status}</span>
-                        {rx.dispensed_at && (
+                        <span className={`badge badge-${activeSection === 'ipd' ? rx.status : rx.status}`}>
+                          {rx.status}
+                        </span>
+                        {activeSection === 'opd' && rx.dispensed_at && (
                           <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px' }}>
                             at {new Date(rx.dispensed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </div>
                         )}
                       </td>
                       <td>
-                        {rx.status === 'authorized' && canDispense && (
+                        {activeSection === 'opd' && rx.status === 'authorized' && canDispense && (
                           <button
                             className="btn btn-success btn-xs"
                             onClick={() => handleDispense(rx.id, rx.medication)}
@@ -229,7 +274,7 @@ export default function Pharmacy({ me }) {
                             <Check size={12} /> Dispense
                           </button>
                         )}
-                        {rx.status === 'dispensed' && (
+                        {activeSection === 'opd' && rx.status === 'dispensed' && (
                           <span style={{ fontSize: '12px', color: '#16a34a', fontWeight: 600 }}>
                             Fulfilled
                           </span>
@@ -258,12 +303,13 @@ export default function Pharmacy({ me }) {
               </button>
             </div>
             <form onSubmit={handleAuthorize} className="panel-body">
+              {error && <div className="alert alert-error" role="alert">{error}</div>}
               <div className="form-group">
                 <label>Select Patient *</label>
                 <select
                   required
                   value={form.patient}
-                  onChange={(e) => setForm({ ...form, patient: e.target.value })}
+                  onChange={(e) => setForm({ ...form, patient: e.target.value, encounter: '' })}
                 >
                   <option value="">-- Choose Patient --</option>
                   {patients.map((p) => (
@@ -283,10 +329,10 @@ export default function Pharmacy({ me }) {
                 >
                   <option value="">-- Choose Encounter --</option>
                   {encounters
-                    .filter((e) => !form.patient || e.patient === form.patient)
+                    .filter((e) => !form.patient || String(e.patient) === form.patient)
                     .map((enc) => (
                       <option key={enc.id} value={enc.id}>
-                        Encounter {enc.id.slice(0, 8)} &mdash; {enc.status}
+                        Encounter {enc.id} &mdash; {enc.status}
                       </option>
                     ))}
                 </select>

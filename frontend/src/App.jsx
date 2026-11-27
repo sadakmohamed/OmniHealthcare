@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useLayoutEffect } from 'react'
 import {
   Users,
   CalendarDays,
@@ -17,10 +17,33 @@ import {
   User,
   Menu,
   X,
-  FileText
+  FileText,
+  Eye,
+  EyeOff
 } from 'lucide-react'
-import { login, getMe, register } from './api'
+import {
+  login,
+  changeInitialPassword,
+  getMe,
+  register
+} from './api'
+import ListFilters from './components/ListFilters'
 import './App.css'
+
+const GLOBAL_LIST_FILTER_SCREENS = {
+  dashboard: { search: true },
+  opd: { search: false },
+  consultants: { search: false },
+  patients: { search: false },
+  triage: { search: false },
+  encounters: { search: true },
+  referrals: { search: true },
+  inpatients: { search: false },
+  billing: { search: true },
+  'follow-ups': { search: true },
+  'patient-portal': { search: true },
+  audit: { search: false }
+}
 
 // Screens
 import Dashboard from './screens/Dashboard'
@@ -37,9 +60,19 @@ import FollowUps from './screens/FollowUps'
 import AuditHistory from './screens/AuditHistory'
 import VirtualCare from './screens/VirtualCare'
 import PatientPortal from './screens/PatientPortal'
+import OPDQueue from './screens/OPDQueue'
+import DoctorConsultation from './screens/DoctorConsultation'
+import Consultants from './screens/Consultants'
+import Inpatients from './screens/Inpatients'
+import LabTests from './screens/LabTests'
+import ManageUsers from './screens/ManageUsers'
+import Medications from './screens/Medications'
+import Profile from './screens/Profile'
+import ClinicianMessages from './screens/ClinicianMessages'
 
 export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem('oh_token'))
+  const [loginMessage, setLoginMessage] = useState('')
   const [me, setMe] = useState(() => {
     try {
       const u = localStorage.getItem('oh_user')
@@ -49,7 +82,16 @@ export default function App() {
     }
   })
   const [currentScreen, setCurrentScreen] = useState('dashboard')
+  const [listFilters, setListFilters] = useState(() => ({
+    search: localStorage.getItem('oh_list_search_dashboard') || '',
+    date: localStorage.getItem('oh_list_date_dashboard') || ''
+  }))
+  const [selectedConsultationPatient, setSelectedConsultationPatient] = useState(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  useLayoutEffect(() => {
+    localStorage.setItem('oh_active_screen', currentScreen)
+  }, [currentScreen])
 
   useEffect(() => {
     if (token) {
@@ -58,20 +100,23 @@ export default function App() {
           setMe(res.data)
           localStorage.setItem('oh_user', JSON.stringify(res.data))
         })
-        .catch(() => {
-          handleLogout()
+        .catch((error) => {
+          if (error.response?.status === 401) {
+            handleLogout()
+          }
         })
     }
   }, [token])
 
   function handleLoginSuccess(authToken, userData) {
+    setLoginMessage('')
     localStorage.setItem('oh_token', authToken)
     if (userData) {
       localStorage.setItem('oh_user', JSON.stringify(userData))
       setMe(userData)
     }
     setToken(authToken)
-    setCurrentScreen('dashboard')
+    navigateTo('dashboard')
   }
 
   function handleLogout() {
@@ -79,26 +124,50 @@ export default function App() {
     localStorage.removeItem('oh_user')
     setToken(null)
     setMe(null)
-    setCurrentScreen('dashboard')
+    navigateTo('dashboard')
+  }
+
+  function navigateTo(screen) {
+    localStorage.setItem('oh_active_screen', screen)
+    setCurrentScreen(screen)
+    setListFilters({
+      search: localStorage.getItem(`oh_list_search_${screen}`) || '',
+      date: localStorage.getItem(`oh_list_date_${screen}`) || ''
+    })
+    setSelectedConsultationPatient(null)
+  }
+
+  function applyListFilters(filters) {
+    localStorage.setItem(`oh_list_search_${currentScreen}`, filters.search)
+    localStorage.setItem(`oh_list_date_${currentScreen}`, filters.date)
+    setListFilters(filters)
   }
 
   if (!token) {
-    return <LoginView onLogin={handleLoginSuccess} />
+    return <LoginView onLogin={handleLoginSuccess} initialMessage={loginMessage} />
   }
 
-  const role = me?.role || 'admin'
+  const role = me?.role || 'pending'
 
   // Navigation Items with Role-Based Permissions
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['*'] },
-    { id: 'patients', label: 'Patient Registry', icon: Users, roles: ['admin', 'receptionist', 'clinician', 'nurse'] },
+    { id: 'opd', label: 'OPD Queue', icon: Stethoscope, roles: ['admin', 'receptionist', 'clinician', 'nurse'] },
+    { id: 'consultants', label: 'Consultants Directory', icon: User, roles: ['admin'] },
+    { id: 'users', label: 'User Accounts', icon: Users, roles: ['admin'] },
+    { id: 'profile', label: 'My Profile', icon: User, roles: ['*'] },
+    { id: 'patients', label: 'Patient Charts', icon: Users, roles: ['admin', 'clinician', 'nurse'] },
     { id: 'appointments', label: 'Appointments', icon: CalendarDays, roles: ['admin', 'receptionist', 'clinician', 'patient'] },
-    { id: 'triage', label: 'Triage & Vitals', icon: Activity, roles: ['admin', 'nurse', 'clinician'] },
+    { id: 'triage', label: 'Triage & Vitals', icon: Activity, roles: ['admin', 'nurse'] },
     { id: 'encounters', label: 'Consultations', icon: Stethoscope, roles: ['admin', 'clinician'] },
-    { id: 'laboratory', label: 'Laboratory', icon: HeartPulse, roles: ['admin', 'lab', 'clinician'] },
-    { id: 'pharmacy', label: 'Pharmacy', icon: Pill, roles: ['admin', 'pharmacist', 'clinician'] },
+    { id: 'messages', label: 'Patient Messages', icon: Bell, roles: ['clinician'] },
+    { id: 'laboratory', label: 'Laboratory', icon: HeartPulse, roles: ['admin', 'clinician', 'lab'] },
+    { id: 'lab-tests', label: 'Lab Test Catalog', icon: HeartPulse, roles: ['admin', 'billing'] },
+    { id: 'pharmacy', label: 'Pharmacy', icon: Pill, roles: ['admin', 'pharmacist'] },
+    { id: 'medications', label: 'Medication Catalog', icon: Pill, roles: ['admin', 'pharmacist'] },
     { id: 'referrals', label: 'Referrals', icon: Share2, roles: ['admin', 'clinician'] },
-    { id: 'wards', label: 'Ward & Beds', icon: BedDouble, roles: ['admin', 'nurse', 'clinician'] },
+    { id: 'inpatients', label: 'Inpatients', icon: BedDouble, roles: ['admin', 'clinician', 'nurse'] },
+    { id: 'wards', label: 'Ward & Beds', icon: BedDouble, roles: ['admin', 'nurse'] },
     { id: 'billing', label: 'Billing & Claims', icon: DollarSign, roles: ['admin', 'billing'] },
     { id: 'follow-ups', label: 'Follow-ups', icon: Bell, roles: ['admin', 'receptionist', 'clinician', 'nurse'] },
     { id: 'virtual', label: 'Virtual Care', icon: Video, roles: ['admin', 'clinician', 'receptionist', 'patient'] },
@@ -109,6 +178,14 @@ export default function App() {
   const visibleNav = navItems.filter(
     (item) => item.roles.includes('*') || item.roles.includes(role)
   )
+  const filters = GLOBAL_LIST_FILTER_SCREENS[currentScreen] && (
+    <ListFilters
+      screen={currentScreen}
+      value={listFilters}
+      showSearch={GLOBAL_LIST_FILTER_SCREENS[currentScreen].search}
+      onApply={applyListFilters}
+    />
+  )
 
   return (
     <div className="app-shell">
@@ -118,12 +195,10 @@ export default function App() {
           <img src="/logo.png" alt="OmniTeckno" onError={(e) => { e.target.style.display = 'none' }} />
           <div className="brand-text">
             <strong>OmniHealthcare</strong>
-            <span>OmniTeckno &bull; Prototype</span>
           </div>
         </div>
 
         <nav>
-          <div className="nav-section-label">Main Navigation</div>
           {visibleNav.map((item) => {
             const Icon = item.icon
             const isActive = currentScreen === item.id
@@ -132,7 +207,7 @@ export default function App() {
                 key={item.id}
                 className={`nav-item ${isActive ? 'active' : ''}`}
                 onClick={() => {
-                  setCurrentScreen(item.id)
+                  navigateTo(item.id)
                   setMobileMenuOpen(false)
                 }}
               >
@@ -161,73 +236,112 @@ export default function App() {
           </button>
         </div>
       </aside>
+      {mobileMenuOpen && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-label="Close navigation menu"
+        />
+      )}
 
       {/* Main Content Area */}
       <main>
-        <header className="topbar">
-          <button className="menu-btn" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+        <header className={`topbar${mobileMenuOpen ? ' menu-open' : ''}`}>
+          <button
+            className="menu-btn"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={mobileMenuOpen}
+          >
             {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
           <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--navy)' }}>
-            OmniHealthcare &mdash; Connected Clinical System
-          </div>
-          <div className="topbar-right">
-            <span className="badge badge-blue" style={{ textTransform: 'uppercase' }}>
-              Role: {role}
-            </span>
-            <div className="topbar-user" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div className="topbar-avatar">
-                {me?.first_name ? me.first_name[0] : me?.username ? me.username[0].toUpperCase() : 'U'}
-              </div>
-              <div>
-                <strong>{me?.first_name ? `${me.first_name} ${me.last_name || ''}` : me?.username}</strong>
-                <small>{role.toUpperCase()}</small>
-              </div>
-            </div>
+            OmniHealthcare
           </div>
         </header>
 
-        <div className="content">
-          {currentScreen === 'dashboard' && <Dashboard me={me} onNavigate={setCurrentScreen} />}
-          {currentScreen === 'patients' && <Patients me={me} onNavigate={setCurrentScreen} />}
-          {currentScreen === 'appointments' && <Appointments me={me} onNavigate={setCurrentScreen} />}
-          {currentScreen === 'triage' && <Triage me={me} onNavigate={setCurrentScreen} />}
-          {currentScreen === 'encounters' && <Encounters me={me} onNavigate={setCurrentScreen} />}
+        <div className="content" key={`${currentScreen}-${listFilters.search}-${listFilters.date}`}>
+          {currentScreen === 'dashboard' && <Dashboard me={me} onNavigate={navigateTo} listFilters={filters} filterValues={listFilters} />}
+          {currentScreen === 'opd' && (
+            selectedConsultationPatient ? (
+              <DoctorConsultation
+                patient={selectedConsultationPatient}
+                me={me}
+                onBack={() => {
+                  localStorage.setItem('oh_active_screen', 'opd')
+                  setSelectedConsultationPatient(null)
+                }}
+              />
+            ) : (
+              <OPDQueue
+                me={me}
+                listFilters={filters}
+                onSelectConsultation={(pt) => {
+                  localStorage.setItem('oh_active_screen', 'doctor-consultation')
+                  setSelectedConsultationPatient(pt)
+                }}
+              />
+            )
+          )}
+          {currentScreen === 'consultants' && <Consultants me={me} listFilters={filters} />}
+          {currentScreen === 'users' && <ManageUsers me={me} />}
+          {currentScreen === 'profile' && me && <Profile me={me} onUpdate={(user) => {
+            setMe(user)
+            localStorage.setItem('oh_user', JSON.stringify(user))
+          }} onPasswordChanged={() => {
+            setLoginMessage('Password changed. Sign in with your new password.')
+            handleLogout()
+          }} />}
+          {currentScreen === 'patients' && <Patients me={me} onNavigate={navigateTo} listFilters={filters} />}
+          {currentScreen === 'appointments' && <Appointments me={me} onNavigate={navigateTo} />}
+          {currentScreen === 'triage' && <Triage me={me} onNavigate={navigateTo} listFilters={filters} />}
+          {currentScreen === 'encounters' && <Encounters me={me} onNavigate={navigateTo} listFilters={filters} />}
+          {currentScreen === 'messages' && <ClinicianMessages me={me} />}
           {currentScreen === 'laboratory' && <Laboratory me={me} />}
+          {currentScreen === 'lab-tests' && <LabTests />}
           {currentScreen === 'pharmacy' && <Pharmacy me={me} />}
-          {currentScreen === 'referrals' && <Referrals me={me} />}
+          {currentScreen === 'medications' && <Medications />}
+          {currentScreen === 'referrals' && <Referrals me={me} listFilters={filters} />}
+          {currentScreen === 'inpatients' && (
+            <Inpatients me={me} onNavigate={navigateTo} listFilters={filters} />
+          )}
           {currentScreen === 'wards' && <WardBoard me={me} />}
-          {currentScreen === 'billing' && <Billing me={me} />}
-          {currentScreen === 'follow-ups' && <FollowUps me={me} />}
+          {currentScreen === 'billing' && <Billing me={me} listFilters={filters} />}
+          {currentScreen === 'follow-ups' && <FollowUps me={me} listFilters={filters} />}
           {currentScreen === 'virtual' && <VirtualCare me={me} />}
-          {currentScreen === 'patient-portal' && <PatientPortal me={me} />}
-          {currentScreen === 'audit' && <AuditHistory me={me} />}
+          {currentScreen === 'patient-portal' && <PatientPortal me={me} listFilters={filters} />}
+          {currentScreen === 'audit' && <AuditHistory me={me} listFilters={filters} />}
         </div>
       </main>
     </div>
   )
 }
 
-function LoginView({ onLogin }) {
-  const [username, setUsername] = useState('receptionist')
-  const [password, setPassword] = useState('Password123!')
+function LoginView({ onLogin, initialMessage }) {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [showRegister, setShowRegister] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [changeToken, setChangeToken] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
 
   // Registration state
   const [regForm, setRegForm] = useState({
     username: '',
-    password: 'Password123!',
+    password: '',
     first_name: '',
     last_name: '',
-    date_of_birth: '1995-06-15',
-    sex: 'Female',
+    date_of_birth: '',
+    sex: '',
     email: '',
-    phone: '+254-700-000000',
-    allergies: 'None'
+    phone: '',
+    allergies: ''
   })
-  const [regSuccess, setRegSuccess] = useState('')
+  const [regSuccess, setRegSuccess] = useState(initialMessage || '')
 
   async function handleLoginSubmit(e) {
     e.preventDefault()
@@ -235,12 +349,46 @@ function LoginView({ onLogin }) {
     setError('')
     try {
       const res = await login(username, password)
+      if (res.data.password_change_token) {
+        setChangeToken(res.data.password_change_token)
+        setPassword('')
+        return
+      }
       const token = res.data.access
       localStorage.setItem('oh_token', token)
       const meRes = await getMe()
       onLogin(token, meRes.data)
-    } catch (err) {
-      setError('Authentication failed. Please verify demo username and credentials.')
+    } catch (requestError) {
+      localStorage.removeItem('oh_token')
+      if (requestError.response?.status === 401) {
+        setError(requestError.response?.data?.detail || 'Invalid username or password.')
+      } else if (!requestError.response) {
+        setError('Unable to reach the sign-in service. Check your connection and try again.')
+      } else {
+        setError('Sign-in is temporarily unavailable. Please try again or contact your administrator.')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleInitialPassword(e) {
+    e.preventDefault()
+    setError('')
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+    setLoading(true)
+    try {
+      await changeInitialPassword(changeToken, newPassword)
+      setChangeToken('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setRegSuccess('Password changed. Sign in with your new password.')
+    } catch (requestError) {
+      const data = requestError.response?.data
+      setError(data?.password?.join(' ') || data?.detail || 'Unable to change password.')
     } finally {
       setLoading(false)
     }
@@ -256,7 +404,7 @@ function LoginView({ onLogin }) {
         ...regForm,
         medical_record_number: 'MRN-' + Math.floor(100000 + Math.random() * 900000)
       })
-      setRegSuccess('Registration successful! You can now sign in as your new patient account.')
+      setRegSuccess('Account created.')
       setUsername(regForm.username)
       setShowRegister(false)
     } catch (err) {
@@ -271,146 +419,96 @@ function LoginView({ onLogin }) {
     }
   }
 
-  function pickDemoRole(roleUser) {
-    setUsername(roleUser)
-    setPassword('Password123!')
-  }
-
   return (
-    <div style={{ minHeight: '100vh', display: 'grid', gridTemplateColumns: 'minmax(320px, 45%) 1fr', background: '#f8fafc' }}>
-      {/* Brand Visual Left Panel */}
-      <div
-        style={{
-          background: 'linear-gradient(135deg, #1a3c5e 0%, #0b2239 100%)',
-          color: '#fff',
-          padding: '60px 48px',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between'
-        }}
-      >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '32px' }}>
-            <img
-              src="/logo.png"
-              alt="OmniTeckno"
-              style={{ width: '48px', height: '48px', borderRadius: '10px', background: '#fff', padding: '4px' }}
-              onError={(e) => { e.target.style.display = 'none' }}
-            />
-            <div>
-              <h1 style={{ fontSize: '24px', color: '#fff', fontWeight: 800 }}>OmniHealthcare</h1>
-              <span style={{ fontSize: '11px', letterSpacing: '1.2px', textTransform: 'uppercase', color: 'var(--accent)' }}>
-                OmniTeckno &bull; Full-Stack Healthcare
-              </span>
+    <div className="login-page">
+      <div className="login-form-panel">
+        <div className="auth-card">
+          <div className="login-brand">
+            <div className="login-logo">
+              <img src="/logo.png" alt="OmniTeckno" />
             </div>
+            <h1>OmniHealthcare</h1>
+            <p>Care connected, every step of the way.</p>
           </div>
 
-          <h2 style={{ fontSize: '28px', lineHeight: 1.25, fontWeight: 700, marginBottom: '16px' }}>
-            Connected Care.<br />Clear Clinical Operations.
-          </h2>
-          <p style={{ fontSize: '14px', opacity: .8, lineHeight: 1.6, maxWidth: '440px' }}>
-            A unified prototype delivering electronic health records, appointment scheduling, nursing triage, consultation notes, laboratory, pharmacy, inpatient bed status, and billing.
-          </p>
-        </div>
-
-        <div style={{ background: 'rgba(255,255,255,.07)', borderRadius: '12px', padding: '18px', border: '1px solid rgba(255,255,255,.12)' }}>
-          <div style={{ fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--accent)', fontWeight: 700, marginBottom: '6px' }}>
-            SYNTHETIC DATASET NOTICE
-          </div>
-          <p style={{ fontSize: '12px', opacity: .85, margin: 0, lineHeight: 1.5 }}>
-            Built strictly for the OmniTeckno confidential engineering assessment. Fictional patients, synthetic payments, and no live clinical decisions.
-          </p>
-        </div>
-      </div>
-
-      {/* Login / Register Card Right Panel */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 24px' }}>
-        <div style={{ width: '100%', maxWidth: '460px' }}>
-          {!showRegister ? (
-            <div className="panel" style={{ padding: '36px 32px' }}>
-              <span className="eyebrow">ASSESSMENT PROTOTYPE</span>
-              <h2 style={{ fontSize: '22px', marginTop: '4px', marginBottom: '8px' }}>Sign in to OmniHealth</h2>
-              <p style={{ color: 'var(--muted)', fontSize: '13px', marginBottom: '20px' }}>
-                Select a demo role below or enter credentials.
-              </p>
-
+          {changeToken ? (
+            <div className="panel auth-panel">
+              <h2>Choose a new password</h2>
+              <p>Change your temporary password before accessing your account.</p>
+              {error && <div className="alert alert-error" role="alert">{error}</div>}
+              <form onSubmit={handleInitialPassword}>
+                <div className="form-group">
+                  <label htmlFor="initial-password">New password</label>
+                  <input id="initial-password" type="password" autoComplete="new-password" minLength={8} required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="initial-confirm">Confirm new password</label>
+                  <input id="initial-confirm" type="password" autoComplete="new-password" minLength={8} required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+                </div>
+                <button className="btn btn-primary login-submit" type="submit" disabled={loading}>Change password</button>
+                <button className="btn btn-secondary login-submit" type="button" onClick={() => { setChangeToken(''); setError(''); setNewPassword(''); setConfirmPassword('') }}>Back to sign in</button>
+              </form>
+            </div>
+          ) : !showRegister ? (
+            <div className="panel auth-panel">
+              <h2>Sign in</h2>
               {error && <div className="alert alert-error">{error}</div>}
               {regSuccess && <div className="alert alert-success">{regSuccess}</div>}
 
-              {/* Demo Roles Quick Chips */}
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>
-                  Quick Demo Role Select (Password: Password123!)
-                </label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {[
-                    'receptionist',
-                    'clinician',
-                    'nurse',
-                    'lab',
-                    'pharmacist',
-                    'billing',
-                    'patient',
-                    'admin'
-                  ].map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      className={`btn btn-xs ${username === r ? 'btn-primary' : 'btn-secondary'}`}
-                      onClick={() => pickDemoRole(r)}
-                    >
-                      {r}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               <form onSubmit={handleLoginSubmit}>
                 <div className="form-group">
-                  <label>Username</label>
+                  <label htmlFor="login-username">Username</label>
                   <input
+                    id="login-username"
                     type="text"
                     required
+                    autoComplete="username"
+                    placeholder="Enter your username"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                   />
                 </div>
 
                 <div className="form-group">
-                  <label>Password</label>
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
+                  <label htmlFor="login-password">Password</label>
+                  <div className="password-input-wrap">
+                    <input
+                      id="login-password"
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      autoComplete="current-password"
+                      placeholder="Enter your password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      aria-pressed={showPassword}
+                      onClick={() => setShowPassword((visible) => !visible)}
+                    >
+                      {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
+                    </button>
+                  </div>
                 </div>
 
                 <button
                   type="submit"
-                  className="btn btn-primary"
-                  style={{ width: '100%', justifyContent: 'center', marginTop: '12px' }}
+                  className="btn btn-primary login-submit"
                   disabled={loading}
                 >
-                  {loading ? 'Authenticating...' : 'Sign In to Workspace'}
+                  {loading ? 'Signing in...' : 'Sign in'}
                 </button>
               </form>
-
-              <div style={{ textAlign: 'center', marginTop: '20px', borderTop: '1px solid var(--line)', paddingTop: '16px' }}>
-                <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Are you a new patient? </span>
-                <button
-                  type="button"
-                  style={{ background: 'none', border: 0, color: 'var(--accent)', fontWeight: 700, cursor: 'pointer', fontSize: '13px' }}
-                  onClick={() => setShowRegister(true)}
-                >
-                  Register Portal Account
-                </button>
+              <div className="auth-switch">
+                <span>New patient?</span>
+                <button type="button" onClick={() => setShowRegister(true)}>Create account</button>
               </div>
             </div>
           ) : (
-            <div className="panel" style={{ padding: '36px 32px' }}>
-              <span className="eyebrow">PATIENT SELF-REGISTRATION</span>
-              <h2 style={{ fontSize: '20px', marginTop: '4px', marginBottom: '16px' }}>Create Patient Account</h2>
+            <div className="panel auth-panel">
+              <h2>Create account</h2>
 
               {error && <div className="alert alert-error">{error}</div>}
 
@@ -421,7 +519,6 @@ function LoginView({ onLogin }) {
                     <input
                       type="text"
                       required
-                      placeholder="Amina"
                       value={regForm.first_name}
                       onChange={(e) => setRegForm({ ...regForm, first_name: e.target.value })}
                     />
@@ -431,7 +528,6 @@ function LoginView({ onLogin }) {
                     <input
                       type="text"
                       required
-                      placeholder="Example"
                       value={regForm.last_name}
                       onChange={(e) => setRegForm({ ...regForm, last_name: e.target.value })}
                     />
@@ -440,18 +536,19 @@ function LoginView({ onLogin }) {
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Desired Username *</label>
+                    <label htmlFor="register-username">Username *</label>
                     <input
+                      id="register-username"
                       type="text"
                       required
-                      placeholder="patient_amina"
                       value={regForm.username}
                       onChange={(e) => setRegForm({ ...regForm, username: e.target.value })}
                     />
                   </div>
                   <div className="form-group">
-                    <label>Date of Birth *</label>
+                    <label htmlFor="register-date-of-birth">Date of Birth *</label>
                     <input
+                      id="register-date-of-birth"
                       type="date"
                       required
                       value={regForm.date_of_birth}
@@ -462,19 +559,47 @@ function LoginView({ onLogin }) {
 
                 <div className="form-row">
                   <div className="form-group">
+                    <label htmlFor="register-sex">Sex *</label>
+                    <select
+                      id="register-sex"
+                      required
+                      value={regForm.sex}
+                      onChange={(e) => setRegForm({ ...regForm, sex: e.target.value })}
+                    >
+                      <option value="">Select sex</option>
+                      <option value="Female">Female</option>
+                      <option value="Male">Male</option>
+                      <option value="Other">Other / Non-binary</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="register-phone">Phone *</label>
+                    <input
+                      id="register-phone"
+                      type="tel"
+                      required
+                      value={regForm.phone}
+                      onChange={(e) => setRegForm({ ...regForm, phone: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
                     <label>Email Address</label>
                     <input
                       type="email"
-                      placeholder="amina@example.invalid"
                       value={regForm.email}
                       onChange={(e) => setRegForm({ ...regForm, email: e.target.value })}
                     />
                   </div>
                   <div className="form-group">
-                    <label>Password *</label>
+                    <label htmlFor="register-password">Password *</label>
                     <input
+                      id="register-password"
                       type="password"
                       required
+                      autoComplete="new-password"
                       value={regForm.password}
                       onChange={(e) => setRegForm({ ...regForm, password: e.target.value })}
                     />
@@ -495,7 +620,7 @@ function LoginView({ onLogin }) {
                     style={{ flex: 1, justifyContent: 'center' }}
                     disabled={loading}
                   >
-                    {loading ? 'Creating...' : 'Register Account'}
+                    {loading ? 'Creating...' : 'Create account'}
                   </button>
                 </div>
               </form>

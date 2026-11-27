@@ -19,6 +19,11 @@ from .models import (
     DischargeNote,
     Encounter,
     FollowUp,
+    InpatientAdmission,
+    InpatientDoctorNote,
+    InpatientMedicationAdministration,
+    InpatientMedicationPlan,
+    InpatientRoomCharge,
     LabOrder,
     LabResult,
     MedicalHistory,
@@ -59,7 +64,7 @@ class UserAdmin(BaseUserAdmin):
     fieldsets = BaseUserAdmin.fieldsets + (
         (
             "OmniHealthcare",
-            {"fields": ("role", "organization", "patient_id")},
+            {"fields": ("role", "organization", "patient")},
         ),
     )
 
@@ -232,9 +237,51 @@ class WardAdmin(admin.ModelAdmin):
 
 @admin.register(Bed)
 class BedAdmin(admin.ModelAdmin):
-    list_display = ("label", "ward", "status", "patient", "organization")
+    list_display = (
+        "label", "ward", "status", "patient", "daily_rate_cents", "organization"
+    )
     list_filter = ("status", "organization", "ward")
     search_fields = ("label", "patient__first_name")
+
+
+@admin.register(InpatientAdmission)
+class InpatientAdmissionAdmin(admin.ModelAdmin):
+    list_display = (
+        "patient", "bed", "clinician", "department", "admitted_at", "discharged_at"
+    )
+    list_filter = ("organization", "department")
+    search_fields = (
+        "patient__medical_record_number", "patient__first_name",
+        "patient__last_name", "bed__label",
+    )
+
+
+@admin.register(InpatientMedicationPlan)
+class InpatientMedicationPlanAdmin(admin.ModelAdmin):
+    list_display = ("admission", "medication", "dosage", "status", "prescribed_by")
+    list_filter = ("status", "organization")
+    search_fields = ("medication", "admission__patient__first_name")
+
+
+@admin.register(InpatientMedicationAdministration)
+class InpatientMedicationAdministrationAdmin(admin.ModelAdmin):
+    list_display = ("admission", "medication", "dosage", "administered_at", "administered_by")
+    list_filter = ("organization",)
+    search_fields = ("medication", "admission__patient__first_name")
+
+
+@admin.register(InpatientDoctorNote)
+class InpatientDoctorNoteAdmin(admin.ModelAdmin):
+    list_display = ("admission", "author", "created_at")
+    list_filter = ("organization",)
+    search_fields = ("content", "admission__patient__first_name")
+
+
+@admin.register(InpatientRoomCharge)
+class InpatientRoomChargeAdmin(admin.ModelAdmin):
+    list_display = ("admission", "day_number", "amount_cents", "bill", "charged_at")
+    list_filter = ("organization",)
+    search_fields = ("admission__patient__first_name", "bill__invoice_number")
 
 
 # ---------------------------------------------------------------------------

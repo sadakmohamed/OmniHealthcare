@@ -20,6 +20,7 @@ import {
   createEncounter,
   transitionEncounter,
   getNotes,
+  getAllPages,
   createNote,
   getDiagnoses,
   createDiagnosis,
@@ -32,7 +33,7 @@ import {
   getClinicians
 } from '../api'
 
-export default function Encounters({ me, onNavigate }) {
+export default function Encounters({ me, onNavigate, listFilters }) {
   const [encounters, setEncounters] = useState([])
   const [patients, setPatients] = useState([])
   const [clinicians, setClinicians] = useState([])
@@ -55,6 +56,7 @@ export default function Encounters({ me, onNavigate }) {
 
   // Forms inside encounter workspace
   const [newNote, setNewNote] = useState({ note_type: 'progress', content: '' })
+  const [amendingNote, setAmendingNote] = useState(null)
   const [newDiagnosis, setNewDiagnosis] = useState({ code: 'I10', description: 'Essential (primary) hypertension' })
   const [newCarePlan, setNewCarePlan] = useState({ description: 'Lifestyle modification, daily BP monitoring, repeat labs in 4 weeks.' })
   const [submittingAction, setSubmittingAction] = useState(false)
@@ -88,29 +90,30 @@ export default function Encounters({ me, onNavigate }) {
 
   async function openEncounterWorkspace(enc) {
     setSelectedEncounter(enc)
+    setAmendingNote(null)
     setLoadingDetails(true)
     setError('')
     setSuccess('')
     try {
       const [nRes, dRes, cpRes, vRes, lRes, pRes] = await Promise.all([
-        getNotes({ encounter: enc.id }).catch(() => ({ data: [] })),
-        getDiagnoses({ encounter: enc.id }).catch(() => ({ data: [] })),
-        getCarePlans({ encounter: enc.id }).catch(() => ({ data: [] })),
-        getVitals({ encounter: enc.id }).catch(() => ({ data: [] })),
-        getLabOrders({ encounter: enc.id }).catch(() => ({ data: [] })),
-        getPrescriptions({ encounter: enc.id }).catch(() => ({ data: [] }))
+        getAllPages(getNotes, { encounter: enc.id }),
+        getAllPages(getDiagnoses, { encounter: enc.id }),
+        getAllPages(getCarePlans, { encounter: enc.id }),
+        getAllPages(getVitals, { encounter: enc.id }),
+        getAllPages(getLabOrders, { encounter: enc.id }),
+        getAllPages(getPrescriptions, { encounter: enc.id })
       ])
 
       setEncounterDetails({
-        notes: nRes.data?.results || nRes.data || [],
-        diagnoses: dRes.data?.results || dRes.data || [],
-        carePlans: cpRes.data?.results || cpRes.data || [],
-        vitals: vRes.data?.results || vRes.data || [],
-        labOrders: lRes.data?.results || lRes.data || [],
-        prescriptions: pRes.data?.results || pRes.data || []
+        notes: nRes,
+        diagnoses: dRes,
+        carePlans: cpRes,
+        vitals: vRes,
+        labOrders: lRes,
+        prescriptions: pRes
       })
-    } catch {
-      // fallback
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to load consultation records.')
     } finally {
       setLoadingDetails(false)
     }
@@ -139,19 +142,25 @@ export default function Encounters({ me, onNavigate }) {
     e.preventDefault()
     if (!newNote.content.trim()) return
     setError('')
+    setSubmittingAction(true)
     try {
       await createNote({
         encounter: selectedEncounter.id,
         patient: selectedEncounter.patient,
         note_type: newNote.note_type,
         content: newNote.content,
-        approved: true
+        approved: true,
+        ...(amendingNote ? { amended_from: amendingNote.id } : {})
       })
-      setSuccess('Clinical note authored and saved immutably.')
+      const wasAmendment = Boolean(amendingNote)
       setNewNote({ note_type: 'progress', content: '' })
-      openEncounterWorkspace(selectedEncounter)
+      await openEncounterWorkspace(selectedEncounter)
+      setSuccess(wasAmendment ? 'Correction saved as a new note; the original is preserved.' : 'Clinical note authored and saved immutably.')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to save clinical note.')
+      const data = err.response?.data
+      setError(data?.detail || (data ? JSON.stringify(data) : 'Failed to save clinical note.'))
+    } finally {
+      setSubmittingAction(false)
     }
   }
 
@@ -197,8 +206,7 @@ export default function Encounters({ me, onNavigate }) {
     try {
       const res = await createEncounter({
         patient: newEncForm.patient,
-        clinician: newEncForm.clinician,
-        status: 'in_progress'
+        clinician: newEncForm.clinician
       })
       setShowCreateModal(false)
       loadData()
@@ -213,7 +221,7 @@ export default function Encounters({ me, onNavigate }) {
 
   // Map allowed next states based on current state
   const allowedTransitions = {
-    scheduled: ['checked_in', 'in_progress', 'cancelled'],
+    scheduled: ['checked_in', 'cancelled'],
     checked_in: ['in_progress', 'cancelled'],
     in_progress: ['documentation_pending', 'entered_in_error'],
     documentation_pending: ['completed', 'entered_in_error'],
@@ -228,11 +236,7 @@ export default function Encounters({ me, onNavigate }) {
     <div className="encounters-screen">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">MODULES F04 & F05</span>
-          <h1>Clinical Encounters & Consultations</h1>
-          <p style={{ color: 'var(--muted)', fontSize: '13px' }}>
-            Longitudinal consultation notes, clinical decision documentation, ICD diagnoses, care plans, and note completion gates.
-          </p>
+          <h1>Consultations</h1>
         </div>
         <div className="page-actions">
           {isClinicianOrAdmin && (
@@ -243,6 +247,7 @@ export default function Encounters({ me, onNavigate }) {
         </div>
       </div>
 
+      {listFilters}
       {error && (
         <div className="alert alert-error">
           <AlertTriangle size={16} />
@@ -299,14 +304,16 @@ export default function Encounters({ me, onNavigate }) {
               <tbody>
                 {encounters.map((enc) => {
                   const pt = patients.find((p) => p.id === enc.patient)
-                  const ptName = pt ? `${pt.first_name} ${pt.last_name}` : `Patient ${enc.patient?.slice ? enc.patient.slice(0, 8) : enc.patient}`
+                  const ptName = pt
+                    ? `${pt.first_name} ${pt.last_name}`
+                    : enc.patient_name || `Patient ${enc.patient?.slice ? enc.patient.slice(0, 8) : enc.patient}`
                   return (
                     <tr
                       key={enc.id}
                       style={{ background: selectedEncounter?.id === enc.id ? '#f0f9ff' : 'inherit' }}
                     >
                       <td style={{ fontFamily: 'monospace', fontSize: '12px' }}>
-                        {enc.id.slice(0, 8)}...
+                        {enc.id}
                       </td>
                       <td>
                         <strong>{ptName}</strong>
@@ -352,8 +359,10 @@ export default function Encounters({ me, onNavigate }) {
               <span className="eyebrow">CONSULTATION WORKSPACE</span>
               <h3 style={{ fontSize: '16px' }}>
                 Encounter: {selectedEncounter.id} &mdash; Patient:{' '}
-                {patients.find((p) => p.id === selectedEncounter.patient)?.first_name || 'Patient'}{' '}
-                {patients.find((p) => p.id === selectedEncounter.patient)?.last_name || ''}
+                {selectedEncounter.patient_name || [
+                  patients.find((p) => p.id === selectedEncounter.patient)?.first_name,
+                  patients.find((p) => p.id === selectedEncounter.patient)?.last_name
+                ].filter(Boolean).join(' ') || 'Patient'}
               </h3>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
                 <span className={`badge badge-${selectedEncounter.status}`}>
@@ -429,11 +438,16 @@ export default function Encounters({ me, onNavigate }) {
           </div>
 
           <div className="panel-body">
+            {loadingDetails ? (
+              <div className="inpatient-empty">Loading consultation records...</div>
+            ) : (
+              <>
             {/* Notes Tab */}
             {activeTab === 'notes' && (
               <div>
                 <div style={{ marginBottom: '20px' }}>
-                  <h4 style={{ fontSize: '14px', marginBottom: '8px' }}>Append Immutable Clinical Note</h4>
+                  <h4 style={{ fontSize: '14px', marginBottom: '8px' }}>{amendingNote ? `Correct note #${amendingNote.id}` : 'Append Immutable Clinical Note'}</h4>
+                  {amendingNote && <p className="form-hint">The correction is a new entry. The original note remains in the history.</p>}
                   <form onSubmit={handleAddNote} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <div style={{ display: 'flex', gap: '12px' }}>
                       <select
@@ -453,9 +467,10 @@ export default function Encounters({ me, onNavigate }) {
                         onChange={(e) => setNewNote({ ...newNote, content: e.target.value })}
                         style={{ flex: 1, height: '38px', borderRadius: '8px', border: '1px solid var(--line)', padding: '0 12px' }}
                       />
-                      <button type="submit" className="btn btn-primary btn-sm">
-                        + Save Note
+                      <button type="submit" className="btn btn-primary btn-sm" disabled={submittingAction}>
+                        {amendingNote ? 'Save Correction' : '+ Save Note'}
                       </button>
+                      {amendingNote && <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setAmendingNote(null); setNewNote({ note_type: 'progress', content: '' }) }}>Cancel Correction</button>}
                     </div>
                   </form>
                 </div>
@@ -473,13 +488,14 @@ export default function Encounters({ me, onNavigate }) {
                       <div key={n.id} style={{ background: '#f8fafc', border: '1px solid var(--line)', borderRadius: '8px', padding: '12px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                           <strong style={{ textTransform: 'capitalize', color: 'var(--primary)' }}>
-                            {n.note_type} Note
+                            {n.note_type} Note #{n.id}{n.amended_from ? ` (corrects #${n.amended_from})` : ''}
                           </strong>
                           <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
                             {new Date(n.created_at).toLocaleString()}
                           </span>
                         </div>
                         <p style={{ fontSize: '13px', color: 'var(--navy)' }}>{n.content}</p>
+                        {isClinicianOrAdmin && <button type="button" className="btn btn-secondary btn-xs" onClick={() => { setAmendingNote(n); setNewNote({ note_type: n.note_type, content: '' }) }}>Correct this note</button>}
                       </div>
                     ))}
                   </div>
@@ -647,8 +663,10 @@ export default function Encounters({ me, onNavigate }) {
                 )}
               </div>
             )}
+                  </>
+                )}
+              </div>
           </div>
-        </div>
       )}
 
       {/* Modal to Open New Encounter */}

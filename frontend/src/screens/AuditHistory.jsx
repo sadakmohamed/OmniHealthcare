@@ -1,17 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import {
-  ShieldCheck,
   Search,
-  Filter,
-  Clock,
-  User,
-  Activity,
-  FileCode,
   AlertTriangle
 } from 'lucide-react'
 import { getAuditLogs } from '../api'
 
-export default function AuditHistory({ me }) {
+export default function AuditHistory({ me, listFilters }) {
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -49,27 +43,17 @@ export default function AuditHistory({ me }) {
     <div className="audit-screen">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">MODULE F12</span>
-          <h1>Clinical Governance & System Audit History</h1>
-          <p style={{ color: 'var(--muted)', fontSize: '13px' }}>
-            Append-only security log, timestamped transaction trails, role actor attributions, and HIPAA-oriented safeguard controls.
-          </p>
+          <h1>Audit History</h1>
         </div>
       </div>
 
+      {listFilters}
       {error && (
         <div className="alert alert-error">
           <AlertTriangle size={16} />
           <div style={{ flex: 1 }}>{error}</div>
         </div>
       )}
-
-      <div className="notice" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <ShieldCheck size={18} color="#92400e" />
-        <div>
-          <strong>TAMPER-EVIDENT AUDIT TRAIL:</strong> Every mutating clinical operation, transition, user login, and prescription event creates an immutable record. Read-only access restricted to Admin role.
-        </div>
-      </div>
 
       {/* Toolbar */}
       <div className="toolbar">
@@ -83,19 +67,19 @@ export default function AuditHistory({ me }) {
           />
         </div>
         <button className="btn btn-secondary" onClick={loadLogs}>
-          Refresh Audit
+          Refresh
         </button>
       </div>
 
       {/* Audit Log Table */}
       <div className="panel">
         <div className="panel-header">
-          <h3>Security & Audit Trail Events ({filtered.length})</h3>
+          <h3>Audit events ({filtered.length})</h3>
         </div>
         <div className="table-wrap">
           {loading ? (
             <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>
-              Loading audit trails...
+            Loading...
             </div>
           ) : filtered.length === 0 ? (
             <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>
@@ -105,12 +89,11 @@ export default function AuditHistory({ me }) {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Timestamp (UTC)</th>
-                  <th>Actor / User</th>
-                  <th>Action Executed</th>
-                  <th>Resource Target</th>
-                  <th>Resource ID</th>
-                  <th>Event Metadata / Details</th>
+                  <th>Time</th>
+                  <th>User</th>
+                  <th>Action</th>
+                  <th>Resource</th>
+                  <th>ID</th>
                 </tr>
               </thead>
               <tbody>
@@ -137,9 +120,6 @@ export default function AuditHistory({ me }) {
                       <span style={{ fontFamily: 'monospace', fontSize: '11px', color: 'var(--muted)' }}>
                         {log.resource_id ? `${log.resource_id.slice(0, 8)}...` : '—'}
                       </span>
-                    </td>
-                    <td style={{ fontSize: '12px', fontFamily: 'monospace', color: 'var(--navy)', maxWidth: '300px' }}>
-                      {log.details ? JSON.stringify(log.details) : '—'}
                     </td>
                   </tr>
                 ))}

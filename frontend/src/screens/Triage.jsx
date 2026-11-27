@@ -9,14 +9,26 @@ import {
   AlertTriangle,
   CheckCircle,
   X,
-  UserCheck
+  UserCheck,
+  Search
 } from 'lucide-react'
-import { getVitals, createVitals, getEncounters, getPatients } from '../api'
+import {
+  getVitals,
+  createVitals,
+  getEncounters,
+  getPatients,
+  getAllAllergies,
+  getInpatientAdmissions
+} from '../api'
 
-export default function Triage({ me, onNavigate }) {
+export default function Triage({ me, onNavigate, listFilters }) {
   const [vitalsList, setVitalsList] = useState([])
   const [encounters, setEncounters] = useState([])
   const [patients, setPatients] = useState([])
+  const [admissions, setAdmissions] = useState([])
+  const [patientAllergies, setPatientAllergies] = useState(null)
+  const [search, setSearch] = useState('')
+  const [departmentFilter, setDepartmentFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -39,18 +51,32 @@ export default function Triage({ me, onNavigate }) {
     loadData()
   }, [])
 
+  useEffect(() => {
+    let active = true
+    if (form.patient) {
+      getAllAllergies({ patient: form.patient }).then((allergies) => {
+        if (active) setPatientAllergies(allergies)
+      }).catch((err) => {
+        if (active) setError(err.response?.data?.detail || 'Unable to load patient allergies.')
+      })
+    }
+    return () => { active = false }
+  }, [form.patient])
+
   async function loadData() {
     setLoading(true)
     setError('')
     try {
-      const [vRes, eRes, pRes] = await Promise.all([
+      const [vRes, eRes, pRes, aRes] = await Promise.all([
         getVitals(),
         getEncounters(),
-        getPatients()
+        getPatients(),
+        getInpatientAdmissions()
       ])
       setVitalsList(vRes.data?.results || vRes.data || [])
       setEncounters(eRes.data?.results || eRes.data || [])
       setPatients(pRes.data?.results || pRes.data || [])
+      setAdmissions(aRes.data?.results || aRes.data || [])
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load triage vitals.')
     } finally {
@@ -59,7 +85,8 @@ export default function Triage({ me, onNavigate }) {
   }
 
   function handleEncounterSelect(encId) {
-    const enc = encounters.find((e) => e.id === encId)
+    const enc = encounters.find((e) => String(e.id) === encId)
+    setPatientAllergies(null)
     setForm({
       ...form,
       encounter: encId,
@@ -100,17 +127,27 @@ export default function Triage({ me, onNavigate }) {
   }
 
   const role = me?.role || 'admin'
-  const canRecord = ['nurse', 'clinician', 'admin'].includes(role)
+  const canRecord = ['nurse', 'admin'].includes(role)
+  const activeAdmissionByPatient = new Map(admissions.map((admission) => [admission.patient, admission]))
+  const filteredVitals = vitalsList.filter((vital) => {
+    const patient = patients.find((item) => item.id === vital.patient)
+    const admission = activeAdmissionByPatient.get(vital.patient)
+    const department = admission ? 'ipd' : patient?.is_opd ? 'opd' : ''
+    const matchesDepartment = !departmentFilter || department === departmentFilter
+    const searchValue = [
+      patient?.first_name,
+      patient?.last_name,
+      patient?.medical_record_number,
+      vital.patient
+    ].join(' ').toLowerCase()
+    return matchesDepartment && searchValue.includes(search.toLowerCase())
+  })
 
   return (
     <div className="triage-screen">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">MODULE F03</span>
-          <h1>Clinical Triage & Physiological Vitals</h1>
-          <p style={{ color: 'var(--muted)', fontSize: '13px' }}>
-            Nurse assessment, vital sign monitoring, blood pressure, oxygen saturation, and clinical baseline triage.
-          </p>
+          <h1>Triage & Vitals</h1>
         </div>
         <div className="page-actions">
           {canRecord && (
@@ -121,6 +158,7 @@ export default function Triage({ me, onNavigate }) {
         </div>
       </div>
 
+      {listFilters}
       {error && (
         <div className="alert alert-error">
           <AlertTriangle size={16} />
@@ -172,19 +210,40 @@ export default function Triage({ me, onNavigate }) {
       {/* Vitals History Log */}
       <div className="panel">
         <div className="panel-header">
-          <h3>Recorded Triage Vitals History ({vitalsList.length})</h3>
+          <h3>Recorded Triage Vitals History ({filteredVitals.length})</h3>
           <button className="btn btn-secondary btn-sm" onClick={loadData}>
             Refresh
           </button>
+        </div>
+        <div className="toolbar triage-filters">
+          <div className="toolbar-search">
+            <Search size={16} />
+            <input
+              aria-label="Search patients in triage"
+              placeholder="Search patient name or ID"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <select
+            className="filter-select"
+            aria-label="Filter by care department"
+            value={departmentFilter}
+            onChange={(e) => setDepartmentFilter(e.target.value)}
+          >
+            <option value="">All departments</option>
+            <option value="opd">OPD</option>
+            <option value="ipd">IPD</option>
+          </select>
         </div>
         <div className="table-wrap">
           {loading ? (
             <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>
               Loading triage observations...
             </div>
-          ) : vitalsList.length === 0 ? (
+          ) : filteredVitals.length === 0 ? (
             <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>
-              No triage vitals recorded yet. Click "+ Record Patient Vitals" to add.
+              No vitals match this search.
             </div>
           ) : (
             <table className="data-table">
@@ -192,6 +251,7 @@ export default function Triage({ me, onNavigate }) {
                 <tr>
                   <th>Timestamp</th>
                   <th>Patient</th>
+                  <th>Department</th>
                   <th>Temperature</th>
                   <th>Blood Pressure</th>
                   <th>Heart Rate</th>
@@ -201,8 +261,9 @@ export default function Triage({ me, onNavigate }) {
                 </tr>
               </thead>
               <tbody>
-                {vitalsList.map((v) => {
+                {filteredVitals.map((v) => {
                   const pt = patients.find((p) => p.id === v.patient)
+                  const admission = activeAdmissionByPatient.get(v.patient)
                   const ptName = pt ? `${pt.first_name} ${pt.last_name}` : `Patient ${v.patient?.slice ? v.patient.slice(0, 8) : v.patient}`
                   return (
                     <tr key={v.id}>
@@ -214,7 +275,11 @@ export default function Triage({ me, onNavigate }) {
                       </td>
                       <td>
                         <strong>{ptName}</strong>
+                        <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                          {pt?.medical_record_number || ''}
+                        </div>
                       </td>
+                      <td>{admission ? `IPD · ${admission.ward_name}` : pt?.is_opd ? 'OPD' : '—'}</td>
                       <td>
                         <span style={{ fontWeight: 600, color: v.temperature_c > 38 ? '#dc2626' : 'inherit' }}>
                           {v.temperature_c ? `${v.temperature_c} °C` : '—'}
@@ -265,6 +330,7 @@ export default function Triage({ me, onNavigate }) {
               </button>
             </div>
             <form onSubmit={handleSubmit} className="panel-body">
+              {error && <div className="alert alert-error" role="alert">{error}</div>}
               <div className="form-group">
                 <label>Linked Encounter / Active Visit *</label>
                 <select
@@ -278,13 +344,22 @@ export default function Triage({ me, onNavigate }) {
                     const name = pt ? `${pt.first_name} ${pt.last_name}` : `Patient ${enc.patient?.slice ? enc.patient.slice(0, 8) : enc.patient}`
                     return (
                       <option key={enc.id} value={enc.id}>
-                        {name} &mdash; Status: {enc.status} (ID: {enc.id.slice(0, 8)})
+                        {name} &mdash; Status: {enc.status} (ID: {enc.id})
                       </option>
                     )
                   })}
                 </select>
               </div>
 
+              {form.patient && (
+                <div className="notice">
+                  Allergies: {[
+                    patients.find((patient) => String(patient.id) === String(form.patient))?.allergies,
+                    ...(patientAllergies || []).map((allergy) => `${allergy.substance}${allergy.reaction ? ` — ${allergy.reaction}` : ''}`)
+                  ].filter(Boolean).join('; ') || 'Not recorded'}
+                  {patientAllergies === null && ' (Structured allergies not yet available)'}
+                </div>
+              )}
               <div className="form-row">
                 <div className="form-group">
                   <label>Temperature (°C)</label>

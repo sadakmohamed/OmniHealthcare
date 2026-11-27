@@ -18,7 +18,7 @@ import {
   getEncounters
 } from '../api'
 
-export default function FollowUps({ me }) {
+export default function FollowUps({ me, listFilters }) {
   const [followUps, setFollowUps] = useState([])
   const [patients, setPatients] = useState([])
   const [encounters, setEncounters] = useState([])
@@ -109,11 +109,7 @@ export default function FollowUps({ me }) {
     <div className="followups-screen">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">MODULE F11</span>
-          <h1>Clinical Follow-Up Reminders</h1>
-          <p style={{ color: 'var(--muted)', fontSize: '13px' }}>
-            In-app recall management, chronicity surveillance, post-discharge review tasks, and scheduled clinical alerts.
-          </p>
+          <h1>Follow-ups</h1>
         </div>
         <div className="page-actions">
           {canManage && (
@@ -124,6 +120,7 @@ export default function FollowUps({ me }) {
         </div>
       </div>
 
+      {listFilters}
       {error && (
         <div className="alert alert-error">
           <AlertTriangle size={16} />

@@ -8,14 +8,32 @@ import {
   X,
   Building,
   Activity,
-  Layers
+  Layers,
+  DollarSign,
+  Pencil,
+  Plus,
+  Trash2
 } from 'lucide-react'
-import { getWards, getBeds, assignBed, dischargeBed, getPatients } from '../api'
+import {
+  getWards,
+  getBeds,
+  createWard,
+  deleteWard,
+  createBed,
+  deleteBed,
+  assignBed,
+  dischargeBed,
+  getPatients,
+  getClinicians,
+  updateBed,
+  setBedActive
+} from '../api'
 
 export default function WardBoard({ me }) {
   const [wards, setWards] = useState([])
   const [beds, setBeds] = useState([])
   const [patients, setPatients] = useState([])
+  const [clinicians, setClinicians] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -24,7 +42,14 @@ export default function WardBoard({ me }) {
   const [showAssignModal, setShowAssignModal] = useState(false)
   const [selectedBed, setSelectedBed] = useState(null)
   const [selectedPatientId, setSelectedPatientId] = useState('')
+  const [selectedClinicianId, setSelectedClinicianId] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [rateBed, setRateBed] = useState(null)
+  const [rateAmount, setRateAmount] = useState('')
+  const [showWardModal, setShowWardModal] = useState(false)
+  const [showBedModal, setShowBedModal] = useState(false)
+  const [wardForm, setWardForm] = useState({ name: '', location: '' })
+  const [bedForm, setBedForm] = useState({ ward: '', label: '', daily_rate: '0.00' })
 
   useEffect(() => {
     loadData()
@@ -34,15 +59,17 @@ export default function WardBoard({ me }) {
     setLoading(true)
     setError('')
     try {
-      const [wRes, bRes, pRes] = await Promise.all([
+      const [wRes, bRes, pRes, cRes] = await Promise.all([
         getWards(),
         getBeds(),
-        getPatients().catch(() => ({ data: [] }))
+        getPatients().catch(() => ({ data: [] })),
+        getClinicians().catch(() => ({ data: [] }))
       ])
 
       setWards(wRes.data?.results || wRes.data || [])
       setBeds(bRes.data?.results || bRes.data || [])
       setPatients(pRes.data?.results || pRes.data || [])
+      setClinicians(cRes.data?.results || cRes.data || [])
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load ward board.')
     } finally {
@@ -53,21 +80,49 @@ export default function WardBoard({ me }) {
   function openAssignModal(bed) {
     setSelectedBed(bed)
     setSelectedPatientId('')
+    setSelectedClinicianId('')
     setShowAssignModal(true)
+  }
+
+  function openRateModal(bed) {
+    setRateBed(bed)
+    setRateAmount(((bed.daily_rate_cents || 0) / 100).toFixed(2))
   }
 
   async function handleAssignSubmit(e) {
     e.preventDefault()
-    if (!selectedBed || !selectedPatientId) return
+    if (!selectedBed || !selectedPatientId || !selectedClinicianId) return
     setSubmitting(true)
     setError('')
     try {
-      await assignBed(selectedBed.id, selectedPatientId)
+      await assignBed(selectedBed.id, selectedPatientId, selectedClinicianId)
       setSuccess(`Bed ${selectedBed.label} allocated to patient.`)
       setShowAssignModal(false)
       loadData()
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to allocate bed.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleRateSubmit(e) {
+    e.preventDefault()
+    if (!rateBed) return
+    const dailyRateCents = Math.round(Number(rateAmount) * 100)
+    if (!Number.isFinite(dailyRateCents) || dailyRateCents < 0) {
+      setError('Enter a valid daily room rate.')
+      return
+    }
+    setSubmitting(true)
+    setError('')
+    try {
+      await updateBed(rateBed.id, { daily_rate_cents: dailyRateCents })
+      setSuccess(`Bed ${rateBed.label} room rate updated.`)
+      setRateBed(null)
+      loadData()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to update room rate.')
     } finally {
       setSubmitting(false)
     }
@@ -85,24 +140,114 @@ export default function WardBoard({ me }) {
     }
   }
 
+  async function handleCreateWard(e) {
+    e.preventDefault()
+    setSubmitting(true)
+    setError('')
+    try {
+      await createWard(wardForm)
+      setSuccess(`Ward ${wardForm.name} created.`)
+      setWardForm({ name: '', location: '' })
+      setShowWardModal(false)
+      await loadData()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to create ward.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleCreateBed(e) {
+    e.preventDefault()
+    const dailyRate = Math.round(Number(bedForm.daily_rate) * 100)
+    if (!Number.isFinite(dailyRate) || dailyRate < 0) {
+      setError('Enter a valid daily room rate.')
+      return
+    }
+    setSubmitting(true)
+    setError('')
+    try {
+      await createBed({
+        ward: bedForm.ward,
+        label: bedForm.label,
+        daily_rate_cents: dailyRate
+      })
+      setSuccess(`Bed ${bedForm.label} created.`)
+      setBedForm({ ward: '', label: '', daily_rate: '0.00' })
+      setShowBedModal(false)
+      await loadData()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to create bed.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleDeleteBed(bed) {
+    if (!window.confirm(`Delete bed ${bed.label}?`)) return
+    setError('')
+    try {
+      await deleteBed(bed.id)
+      setSuccess(`Bed ${bed.label} deleted.`)
+      await loadData()
+    } catch (err) {
+      setError(err.response?.data?.detail || err.response?.data?.bed?.[0] || 'Unable to delete this bed.')
+    }
+  }
+
+  async function handleSetActive(bed) {
+    const active = bed.status === 'inactive'
+    setError('')
+    try {
+      await setBedActive(bed.id, active)
+      setSuccess(`Bed ${bed.label} ${active ? 'activated' : 'inactivated'}.`)
+      await loadData()
+    } catch (err) {
+      setError(err.response?.data?.detail || err.response?.data?.bed?.[0] || 'Unable to change bed availability.')
+    }
+  }
+
+  async function handleDeleteWard(ward) {
+    if (!window.confirm(`Delete ward ${ward.name}?`)) return
+    setError('')
+    try {
+      await deleteWard(ward.id)
+      setSuccess(`Ward ${ward.name} deleted.`)
+      await loadData()
+    } catch (err) {
+      setError(err.response?.data?.detail || err.response?.data?.ward?.[0] || 'Unable to delete this ward.')
+    }
+  }
+
   const totalBeds = beds.length
   const occupiedBeds = beds.filter((b) => b.status === 'occupied').length
   const availableBeds = beds.filter((b) => b.status === 'available').length
-  const occupancyRate = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0
+  const activeBeds = beds.filter((b) => b.status !== 'inactive').length
+  const occupancyRate = activeBeds > 0 ? Math.round((occupiedBeds / activeBeds) * 100) : 0
 
   const role = me?.role || 'admin'
   const canManage = ['nurse', 'clinician', 'admin'].includes(role)
+  const canSetRoomRate = role === 'admin'
 
   return (
     <div className="ward-screen">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">MODULE F09</span>
-          <h1>Inpatient Ward Management & Bed Allocation</h1>
-          <p style={{ color: 'var(--muted)', fontSize: '13px' }}>
-            Real-time inpatient census, bed occupancy status, admission allocation, and patient discharge tracking.
-          </p>
+          <h1>Ward & Beds</h1>
         </div>
+        {role === 'admin' && (
+          <div className="page-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setShowWardModal(true)}>
+              <Plus size={15} /> Create ward
+            </button>
+            <button type="button" className="btn btn-primary" onClick={() => {
+              setBedForm({ ward: wards[0]?.id || '', label: '', daily_rate: '0.00' })
+              setShowBedModal(true)
+            }} disabled={!wards.length}>
+              <Plus size={15} /> Add bed
+            </button>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -175,19 +320,25 @@ export default function WardBoard({ me }) {
                     <small style={{ color: 'var(--muted)' }}>({w.location || 'Main Hospital Block'})</small>
                   </div>
                   <span className="badge badge-gray">{wardBeds.length} Beds</span>
+                  {role === 'admin' && wardBeds.length === 0 && (
+                    <button type="button" className="btn btn-danger btn-xs" onClick={() => handleDeleteWard(w)}>
+                      <Trash2 size={12} /> Delete ward
+                    </button>
+                  )}
                 </div>
                 <div className="panel-body">
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '14px' }}>
                     {wardBeds.map((bed) => {
                       const isOccupied = bed.status === 'occupied'
+                      const isInactive = bed.status === 'inactive'
                       const pt = isOccupied ? patients.find((p) => p.id === bed.patient) : null
                       const ptName = pt ? `${pt.first_name} ${pt.last_name}` : (isOccupied ? `Patient ${bed.patient?.slice ? bed.patient.slice(0, 8) : bed.patient}` : null)
                       return (
                         <div
                           key={bed.id}
                           style={{
-                            border: `1.5px solid ${isOccupied ? '#fca5a5' : '#86efac'}`,
-                            background: isOccupied ? '#fff5f5' : '#f0fdf4',
+                            border: `1.5px solid ${isOccupied ? '#fca5a5' : isInactive ? '#cbd5e1' : '#86efac'}`,
+                            background: isOccupied ? '#fff5f5' : isInactive ? '#f8fafc' : '#f0fdf4',
                             borderRadius: '10px',
                             padding: '14px',
                             display: 'flex',
@@ -199,7 +350,7 @@ export default function WardBoard({ me }) {
                             <strong style={{ fontSize: '15px', color: 'var(--navy)' }}>
                               Bed {bed.label}
                             </strong>
-                            <span className={`badge ${isOccupied ? 'badge-red' : 'badge-green'}`}>
+                            <span className={`badge ${isOccupied ? 'badge-red' : isInactive ? 'badge-gray' : 'badge-green'}`}>
                               {bed.status}
                             </span>
                           </div>
@@ -212,6 +363,8 @@ export default function WardBoard({ me }) {
                                   MRN: {pt?.medical_record_number || 'Inpatient'}
                                 </span>
                               </div>
+                            ) : isInactive ? (
+                              <div style={{ color: 'var(--muted)', paddingTop: '8px' }}>Unavailable for admission</div>
                             ) : (
                               <div style={{ color: '#166534', fontStyle: 'italic', paddingTop: '8px' }}>
                                 Cleaned & Ready for Admission
@@ -219,9 +372,27 @@ export default function WardBoard({ me }) {
                             )}
                           </div>
 
+                          <div className="bed-rate">
+                            <span>
+                              <DollarSign size={13} />
+                              {bed.daily_rate_cents > 0
+                                ? `$${(bed.daily_rate_cents / 100).toFixed(2)} / 24h`
+                                : 'Rate not set'}
+                            </span>
+                            {canSetRoomRate && (
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-xs"
+                                onClick={() => openRateModal(bed)}
+                              >
+                                <Pencil size={12} /> Set rate
+                              </button>
+                            )}
+                          </div>
+
                           {canManage && (
                             <div style={{ marginTop: 'auto', paddingTop: '6px' }}>
-                              {!isOccupied ? (
+                              {!isOccupied && !isInactive ? (
                                 <button
                                   className="btn btn-primary btn-xs"
                                   style={{ width: '100%', justifyContent: 'center' }}
@@ -229,7 +400,7 @@ export default function WardBoard({ me }) {
                                 >
                                   <UserPlus size={13} /> Admit Patient
                                 </button>
-                              ) : (
+                              ) : isOccupied ? (
                                 <button
                                   className="btn btn-danger btn-xs"
                                   style={{ width: '100%', justifyContent: 'center' }}
@@ -237,6 +408,16 @@ export default function WardBoard({ me }) {
                                 >
                                   <UserMinus size={13} /> Discharge Bed
                                 </button>
+                              ) : null}
+                              {role === 'admin' && !isOccupied && (
+                                <>
+                                  <button type="button" className="btn btn-secondary btn-xs" onClick={() => handleSetActive(bed)}>
+                                    {isInactive ? 'Activate bed' : 'Inactivate bed'}
+                                  </button>
+                                  <button type="button" className="btn btn-secondary btn-xs" onClick={() => handleDeleteBed(bed)}>
+                                    <Trash2 size={12} /> Delete bed
+                                  </button>
+                                </>
                               )}
                             </div>
                           )}
@@ -270,7 +451,12 @@ export default function WardBoard({ me }) {
                 <select
                   required
                   value={selectedPatientId}
-                  onChange={(e) => setSelectedPatientId(e.target.value)}
+                  onChange={(e) => {
+                    const patientId = e.target.value
+                    const patient = patients.find((item) => item.id === patientId)
+                    setSelectedPatientId(patientId)
+                    setSelectedClinicianId(patient?.assigned_clinician || '')
+                  }}
                 >
                   <option value="">-- Choose Patient for Admission --</option>
                   {patients.map((p) => (
@@ -280,6 +466,30 @@ export default function WardBoard({ me }) {
                   ))}
                 </select>
               </div>
+              <div className="form-group">
+                <label>Attending Doctor *</label>
+                <select
+                  required
+                  value={selectedClinicianId}
+                  onChange={(e) => setSelectedClinicianId(e.target.value)}
+                >
+                  <option value="">-- Select Doctor --</option>
+                  {clinicians.map((clinician) => (
+                    <option key={clinician.id} value={clinician.id}>
+                      {clinician.name || clinician.user_detail?.username || clinician.specialty}
+                      {' - '}
+                      {clinician.department || clinician.specialty}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {selectedBed.daily_rate_cents > 0 ? (
+                <p className="form-hint">
+                  Room charge: ${(selectedBed.daily_rate_cents / 100).toFixed(2)} per completed 24 hours.
+                </p>
+              ) : (
+                <p className="form-hint">No room rate is set for this bed.</p>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
                 <button
@@ -292,6 +502,103 @@ export default function WardBoard({ me }) {
                 <button type="submit" className="btn btn-primary" disabled={submitting}>
                   {submitting ? 'Admitting...' : 'Confirm Admission'}
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {rateBed && (
+        <div className="modal-overlay" onClick={() => setRateBed(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="panel-header">
+              <h3>Room Rate - Bed {rateBed.label}</h3>
+              <button
+                type="button"
+                style={{ border: 0, background: 'none', cursor: 'pointer', color: 'var(--muted)' }}
+                onClick={() => setRateBed(null)}
+                aria-label="Close room rate form"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <form onSubmit={handleRateSubmit} className="panel-body">
+              <div className="form-group">
+                <label htmlFor="daily-room-rate">Rate per 24 hours ($) *</label>
+                <input
+                  id="daily-room-rate"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  required
+                  value={rateAmount}
+                  onChange={(e) => setRateAmount(e.target.value)}
+                />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setRateBed(null)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={submitting}>
+                  {submitting ? 'Saving...' : 'Save rate'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showWardModal && (
+        <div className="modal-overlay" onClick={() => setShowWardModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="panel-header">
+              <h3>Create ward</h3>
+              <button type="button" className="modal-close" onClick={() => setShowWardModal(false)} aria-label="Close">×</button>
+            </div>
+            <form className="panel-body" onSubmit={handleCreateWard}>
+              <div className="form-group">
+                <label htmlFor="ward-name">Ward name *</label>
+                <input id="ward-name" required value={wardForm.name} onChange={(e) => setWardForm({ ...wardForm, name: e.target.value })} placeholder="e.g. Ward A, ICU, Maternity" />
+              </div>
+              <div className="form-group">
+                <label htmlFor="ward-location">Location</label>
+                <input id="ward-location" value={wardForm.location} onChange={(e) => setWardForm({ ...wardForm, location: e.target.value })} placeholder="e.g. East wing, first floor" />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowWardModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Saving...' : 'Create ward'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showBedModal && (
+        <div className="modal-overlay" onClick={() => setShowBedModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="panel-header">
+              <h3>Add bed</h3>
+              <button type="button" className="modal-close" onClick={() => setShowBedModal(false)} aria-label="Close">×</button>
+            </div>
+            <form className="panel-body" onSubmit={handleCreateBed}>
+              <div className="form-group">
+                <label htmlFor="bed-ward">Ward *</label>
+                <select id="bed-ward" required value={bedForm.ward} onChange={(e) => setBedForm({ ...bedForm, ward: e.target.value })}>
+                  <option value="">Select a ward</option>
+                  {wards.map((ward) => <option key={ward.id} value={ward.id}>{ward.name}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label htmlFor="bed-label">Bed name or number *</label>
+                <input id="bed-label" required value={bedForm.label} onChange={(e) => setBedForm({ ...bedForm, label: e.target.value })} placeholder="e.g. A-01" />
+              </div>
+              <div className="form-group">
+                <label htmlFor="new-bed-rate">Rate per 24 hours ($)</label>
+                <input id="new-bed-rate" type="number" min="0" step="0.01" value={bedForm.daily_rate} onChange={(e) => setBedForm({ ...bedForm, daily_rate: e.target.value })} />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowBedModal(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Saving...' : 'Create bed'}</button>
               </div>
             </form>
           </div>

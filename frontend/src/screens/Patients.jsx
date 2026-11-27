@@ -17,15 +17,16 @@ import {
 import {
   getPatients,
   createPatient,
+  updatePatient,
   getEncounters,
   getVitals,
   getPrescriptions,
   getLabResults,
-  getAllergies,
+  getAllAllergies,
   getMedicalHistories
 } from '../api'
 
-export default function Patients({ me, onNavigate }) {
+export default function Patients({ me, onNavigate, listFilters }) {
   const [patients, setPatients] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -34,6 +35,7 @@ export default function Patients({ me, onNavigate }) {
 
   // Modals
   const [showRegisterModal, setShowRegisterModal] = useState(false)
+  const [editingPatient, setEditingPatient] = useState(null)
   const [selectedPatient, setSelectedPatient] = useState(null)
   const [patientDetails, setPatientDetails] = useState({
     allergies: [],
@@ -51,7 +53,7 @@ export default function Patients({ me, onNavigate }) {
     last_name: '',
     date_of_birth: '',
     sex: 'Female',
-    phone: '+254-700-000000',
+    phone: '',
     email: '',
     allergies: 'No known drug allergies'
   })
@@ -87,19 +89,21 @@ export default function Patients({ me, onNavigate }) {
     try {
       // Auto-generate MRN if not provided
       const mrn = 'MRN-' + Math.floor(100000 + Math.random() * 900000)
-      const payload = {
-        ...formData,
-        medical_record_number: mrn
+      if (editingPatient) {
+        await updatePatient(editingPatient.id, formData)
+        setSuccess(`Patient ${formData.first_name} ${formData.last_name} updated. Their account username was not changed.`)
+      } else {
+        const response = await createPatient({ ...formData, medical_record_number: mrn })
+        setSuccess(`Patient ${formData.first_name} ${formData.last_name} registered with MRN ${mrn}. Username: ${response.data.phone}. Temporary password: ${response.data.temporary_password}. Give it privately to the patient; it will not be shown again.`)
       }
-      await createPatient(payload)
-      setSuccess(`Patient ${formData.first_name} ${formData.last_name} registered successfully with MRN: ${mrn}`)
       setShowRegisterModal(false)
+      setEditingPatient(null)
       setFormData({
         first_name: '',
         last_name: '',
         date_of_birth: '',
         sex: 'Female',
-        phone: '+254-700-000000',
+        phone: '',
         email: '',
         allergies: 'No known drug allergies'
       })
@@ -122,7 +126,7 @@ export default function Patients({ me, onNavigate }) {
     setLoadingDetails(true)
     try {
       const [allRes, histRes, encRes, vitRes, rxRes, labRes] = await Promise.all([
-        getAllergies({ patient: patient.id }).catch(() => ({ data: [] })),
+        getAllAllergies({ patient: patient.id }),
         getMedicalHistories({ patient: patient.id }).catch(() => ({ data: [] })),
         getEncounters({ patient: patient.id }).catch(() => ({ data: [] })),
         getVitals({ patient: patient.id }).catch(() => ({ data: [] })),
@@ -131,41 +135,39 @@ export default function Patients({ me, onNavigate }) {
       ])
 
       setPatientDetails({
-        allergies: allRes.data?.results || allRes.data || [],
+        allergies: allRes,
         history: histRes.data?.results || histRes.data || [],
         encounters: encRes.data?.results || encRes.data || [],
         vitals: vitRes.data?.results || vitRes.data || [],
         prescriptions: rxRes.data?.results || rxRes.data || [],
         labResults: labRes.data?.results || labRes.data || []
       })
-    } catch {
-      // fallback
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to load patient allergies and chart.')
+      setSelectedPatient(null)
     } finally {
       setLoadingDetails(false)
     }
   }
 
-  const canRegister = ['admin', 'receptionist', 'clinician'].includes(me?.role)
+  const canRegister = me?.role === 'admin'
 
   return (
     <div className="patients-screen">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">MODULE F01</span>
-          <h1>Patient Registry & Master Index</h1>
-          <p style={{ color: 'var(--muted)', fontSize: '13px' }}>
-            Searchable patient records, medical record numbers, demographic identities, and longitudinal charts.
-          </p>
+          <h1>Patients</h1>
         </div>
         <div className="page-actions">
           {canRegister && (
-            <button className="btn btn-primary" onClick={() => setShowRegisterModal(true)}>
+            <button className="btn btn-primary" onClick={() => { setEditingPatient(null); setFormData({ first_name: '', last_name: '', date_of_birth: '', sex: 'Female', phone: '', email: '', allergies: 'No known drug allergies' }); setShowRegisterModal(true) }}>
               <Plus size={16} /> Register New Patient
             </button>
           )}
         </div>
       </div>
 
+      {listFilters}
       {error && (
         <div className="alert alert-error">
           <AlertTriangle size={16} />
@@ -285,6 +287,13 @@ export default function Patients({ me, onNavigate }) {
                         >
                           <Eye size={13} /> View Chart
                         </button>
+                        {canRegister && (
+                          <button type="button" className="btn btn-secondary btn-xs" onClick={() => {
+                            setEditingPatient(p)
+                            setFormData({ first_name: p.first_name, last_name: p.last_name, date_of_birth: p.date_of_birth || '', sex: p.sex || 'Other', phone: p.phone || '', email: p.email || '', allergies: p.allergies || '' })
+                            setShowRegisterModal(true)
+                          }}>Edit</button>
+                        )}
                       </td>
                     </tr>
                   )
@@ -300,7 +309,7 @@ export default function Patients({ me, onNavigate }) {
         <div className="modal-overlay" onClick={() => setShowRegisterModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="panel-header">
-              <h3>Register New Patient</h3>
+              <h3>{editingPatient ? 'Edit Patient' : 'Register New Patient'}</h3>
               <button
                 style={{ border: 0, background: 'none', cursor: 'pointer', color: 'var(--muted)' }}
                 onClick={() => setShowRegisterModal(false)}
@@ -309,6 +318,7 @@ export default function Patients({ me, onNavigate }) {
               </button>
             </div>
             <form onSubmit={handleRegister} className="panel-body">
+              {error && <div className="alert alert-error" role="alert">{error}</div>}
               <div className="form-row">
                 <div className="form-group">
                   <label>First Name *</label>
@@ -360,10 +370,12 @@ export default function Patients({ me, onNavigate }) {
                   <label>Phone Contact</label>
                   <input
                     type="text"
+                    required
                     placeholder="+254-700-000000"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   />
+                  {editingPatient && <small className="form-hint">Changing the phone number does not change the account username.</small>}
                 </div>
                 <div className="form-group">
                   <label>Email Address</label>
@@ -394,7 +406,7 @@ export default function Patients({ me, onNavigate }) {
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={submitting}>
-                  {submitting ? 'Registering...' : 'Register Patient'}
+                  {submitting ? 'Saving...' : editingPatient ? 'Save changes' : 'Register Patient'}
                 </button>
               </div>
             </form>
@@ -441,7 +453,7 @@ export default function Patients({ me, onNavigate }) {
                       <ShieldAlert size={16} /> Allergies & Adverse Reactions
                     </div>
                     <p style={{ marginTop: '4px', fontSize: '13px', color: '#7f1d1d' }}>
-                      {selectedPatient.allergies || 'No known synthetic allergies documented.'}
+                      {selectedPatient.allergies || 'No allergies recorded.'}
                     </p>
                     {patientDetails.allergies.length > 0 && (
                       <div style={{ marginTop: '8px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>

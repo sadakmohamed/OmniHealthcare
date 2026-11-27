@@ -1,21 +1,19 @@
 import React, { useState, useEffect } from 'react'
 import {
-  HeartPulse,
   Plus,
   FileCheck,
   CheckCircle,
   AlertTriangle,
   X,
   Search,
-  Filter,
   Microscope,
-  Calendar,
-  User
 } from 'lucide-react'
 import {
   getLabOrders,
   createLabOrder,
+  reviewLabOrder,
   getLabResults,
+  getLabTests,
   createLabResult,
   getPatients,
   getEncounters
@@ -25,22 +23,27 @@ export default function Laboratory({ me }) {
   const [activeTab, setActiveTab] = useState('orders')
   const [orders, setOrders] = useState([])
   const [results, setResults] = useState([])
+  const [labTests, setLabTests] = useState([])
   const [patients, setPatients] = useState([])
   const [encounters, setEncounters] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [patientSearch, setPatientSearch] = useState('')
+  const [departmentFilter, setDepartmentFilter] = useState('')
+  const [dateFilter, setDateFilter] = useState('')
 
   // Modals
   const [showOrderModal, setShowOrderModal] = useState(false)
   const [showResultModal, setShowResultModal] = useState(false)
   const [selectedOrderForResults, setSelectedOrderForResults] = useState(null)
+  const [amendedResult, setAmendedResult] = useState(null)
 
   // Order form (clinician)
   const [orderForm, setOrderForm] = useState({
     patient: '',
     encounter: '',
-    test_name: 'Complete Blood Count (CBC)'
+    test_name: ''
   })
 
   // Result form (lab staff)
@@ -60,15 +63,17 @@ export default function Laboratory({ me }) {
     setLoading(true)
     setError('')
     try {
-      const [oRes, rRes, pRes, eRes] = await Promise.all([
+      const [oRes, rRes, pRes, eRes, tRes] = await Promise.all([
         getLabOrders(),
         getLabResults(),
         getPatients().catch(() => ({ data: [] })),
-        getEncounters().catch(() => ({ data: [] }))
+        getEncounters().catch(() => ({ data: [] })),
+        ['clinician', 'admin'].includes(me?.role) ? getLabTests() : Promise.resolve({ data: [] })
       ])
 
       setOrders(oRes.data?.results || oRes.data || [])
       setResults(rRes.data?.results || rRes.data || [])
+      setLabTests(tRes.data.filter((test) => test.active))
       setPatients(pRes.data?.results || pRes.data || [])
       setEncounters(eRes.data?.results || eRes.data || [])
     } catch (err) {
@@ -93,15 +98,35 @@ export default function Laboratory({ me }) {
       setShowOrderModal(false)
       loadData()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to submit laboratory order.')
+      setError(err.response?.data?.detail || JSON.stringify(err.response?.data || 'Failed to submit laboratory order.'))
     } finally {
       setSubmitting(false)
     }
   }
 
   function openEnterResultModal(order) {
+    setAmendedResult(null)
+    setResultForm({ result: '', reference_range: '', status: 'final' })
     setSelectedOrderForResults(order)
     setShowResultModal(true)
+  }
+
+  function openAmendResultModal(result) {
+    setAmendedResult(result)
+    setSelectedOrderForResults({ id: result.order, patient: result.patient, test_name: result.test_name })
+    setResultForm({ result: result.result, reference_range: result.reference_range, status: result.status })
+    setShowResultModal(true)
+  }
+
+  async function handleReview(orderId) {
+    setError('')
+    try {
+      await reviewLabOrder(orderId)
+      setSuccess('Laboratory result reviewed.')
+      await loadData()
+    } catch (err) {
+      setError(err.response?.data?.detail || JSON.stringify(err.response?.data || 'Failed to review result.'))
+    }
   }
 
   async function handleCreateResult(e) {
@@ -115,14 +140,15 @@ export default function Laboratory({ me }) {
         patient: selectedOrderForResults.patient,
         result: resultForm.result,
         reference_range: resultForm.reference_range,
-        status: resultForm.status
+        status: resultForm.status,
+        ...(amendedResult ? { amended_from: amendedResult.id } : {})
       })
-      setSuccess(`Result for ${selectedOrderForResults.test_name} recorded and matched to patient chart.`)
+      setSuccess(`Result for ${selectedOrderForResults.test_name} recorded and awaiting clinician review.`)
       setShowResultModal(false)
       setSelectedOrderForResults(null)
       loadData()
     } catch (err) {
-      setError(err.response?.data?.detail || err.response?.data || 'Failed to enter laboratory result.')
+      setError(err.response?.data?.detail || JSON.stringify(err.response?.data || 'Failed to enter laboratory result.'))
     } finally {
       setSubmitting(false)
     }
@@ -131,16 +157,33 @@ export default function Laboratory({ me }) {
   const role = me?.role || 'admin'
   const canOrder = ['clinician', 'admin'].includes(role)
   const canEnterResult = ['lab', 'admin'].includes(role)
+  const searchTerm = patientSearch.trim().toLowerCase()
+  const matchesFilters = (record) => {
+    const patient = patients.find((item) => item.id === record.patient)
+    const patientDetails = [
+      patient?.first_name,
+      patient?.last_name,
+      patient?.medical_record_number,
+      patient?.id,
+      record.patient
+    ].filter(Boolean).join(' ').toLowerCase()
+    const timestamp = new Date(record.created_at)
+    const localDate = Number.isNaN(timestamp.getTime())
+      ? ''
+      : `${timestamp.getFullYear()}-${String(timestamp.getMonth() + 1).padStart(2, '0')}-${String(timestamp.getDate()).padStart(2, '0')}`
+
+    return (!searchTerm || patientDetails.includes(searchTerm))
+      && (!departmentFilter || (record.care_type || 'opd') === departmentFilter)
+      && (!dateFilter || localDate === dateFilter)
+  }
+  const filteredOrders = orders.filter(matchesFilters)
+  const filteredResults = results.filter(matchesFilters)
 
   return (
     <div className="lab-screen">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">MODULE F06</span>
-          <h1>Diagnostic Laboratory Information System</h1>
-          <p style={{ color: 'var(--muted)', fontSize: '13px' }}>
-            Specimen testing, clinician order requisitions, technologist result entry, reference ranges, and chart integration.
-          </p>
+          <h1>Laboratory</h1>
         </div>
         <div className="page-actions">
           {canOrder && (
@@ -179,7 +222,7 @@ export default function Laboratory({ me }) {
           className={`btn ${activeTab === 'results' ? 'btn-primary' : 'btn-secondary'}`}
           onClick={() => setActiveTab('results')}
         >
-          <FileCheck size={16} /> Verified Lab Results ({results.length})
+          <FileCheck size={16} /> Lab Results ({results.length})
         </button>
       </div>
 
@@ -190,14 +233,42 @@ export default function Laboratory({ me }) {
             <h3>Laboratory Requisitions</h3>
             <button className="btn btn-secondary btn-sm" onClick={loadData}>Refresh</button>
           </div>
+          <div className="toolbar">
+            <div className="toolbar-search">
+              <Search size={16} />
+              <input
+                aria-label="Search laboratory patients"
+                placeholder="Search patient name or ID"
+                value={patientSearch}
+                onChange={(e) => setPatientSearch(e.target.value)}
+              />
+            </div>
+            <select
+              className="filter-select"
+              aria-label="Filter laboratory by department"
+              value={departmentFilter}
+              onChange={(e) => setDepartmentFilter(e.target.value)}
+            >
+              <option value="">All departments</option>
+              <option value="opd">OPD</option>
+              <option value="ipd">IPD</option>
+            </select>
+            <input
+              className="filter-select"
+              type="date"
+              aria-label="Filter laboratory by date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+            />
+          </div>
           <div className="table-wrap">
             {loading ? (
               <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>
                 Loading requisitions...
               </div>
-            ) : orders.length === 0 ? (
+            ) : filteredOrders.length === 0 ? (
               <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>
-                No active lab orders found.
+                {orders.length ? 'No lab orders match the selected filters.' : 'No active lab orders found.'}
               </div>
             ) : (
               <table className="data-table">
@@ -205,13 +276,14 @@ export default function Laboratory({ me }) {
                   <tr>
                     <th>Ordered Date</th>
                     <th>Patient</th>
+                    <th>Patient type</th>
                     <th>Diagnostic Test</th>
                     <th>Status</th>
                     <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {orders.map((o) => {
+                  {filteredOrders.map((o) => {
                     const pt = patients.find((p) => p.id === o.patient)
                     const ptName = pt ? `${pt.first_name} ${pt.last_name}` : `Patient ${o.patient?.slice ? o.patient.slice(0, 8) : o.patient}`
                     return (
@@ -220,6 +292,7 @@ export default function Laboratory({ me }) {
                         <td>
                           <strong>{ptName}</strong>
                         </td>
+                        <td><span className={`badge ${o.care_type === 'ipd' ? 'badge-blue' : 'badge-gray'}`}>{o.care_type === 'ipd' ? 'IPD' : 'OPD'}</span></td>
                         <td>
                           <strong>{o.test_name}</strong>
                         </td>
@@ -227,7 +300,7 @@ export default function Laboratory({ me }) {
                           <span className={`badge badge-${o.status}`}>{o.status}</span>
                         </td>
                         <td>
-                          {canEnterResult && o.status !== 'reviewed' && (
+                          {canEnterResult && o.status === 'ordered' && (
                             <button
                               className="btn btn-primary btn-xs"
                               onClick={() => openEnterResultModal(o)}
@@ -253,28 +326,60 @@ export default function Laboratory({ me }) {
             <h3>Laboratory Results Log</h3>
             <button className="btn btn-secondary btn-sm" onClick={loadData}>Refresh</button>
           </div>
+          <div className="toolbar">
+            <div className="toolbar-search">
+              <Search size={16} />
+              <input
+                aria-label="Search laboratory patients"
+                placeholder="Search patient name or ID"
+                value={patientSearch}
+                onChange={(e) => setPatientSearch(e.target.value)}
+              />
+            </div>
+            <select
+              className="filter-select"
+              aria-label="Filter laboratory by department"
+              value={departmentFilter}
+              onChange={(e) => setDepartmentFilter(e.target.value)}
+            >
+              <option value="">All departments</option>
+              <option value="opd">OPD</option>
+              <option value="ipd">IPD</option>
+            </select>
+            <input
+              className="filter-select"
+              type="date"
+              aria-label="Filter laboratory by date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+            />
+          </div>
           <div className="table-wrap">
             {loading ? (
               <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>
                 Loading results...
               </div>
-            ) : results.length === 0 ? (
+            ) : filteredResults.length === 0 ? (
               <div style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>
-                No verified lab results recorded yet.
+                {results.length ? 'No results match the selected filters.' : 'No lab results recorded yet.'}
               </div>
             ) : (
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Verified Timestamp</th>
+                    <th>Recorded Timestamp</th>
                     <th>Patient</th>
+                    <th>Patient type</th>
+                    <th>Diagnostic Test</th>
                     <th>Quantitative / Qualitative Findings</th>
                     <th>Reference Range</th>
                     <th>Status</th>
+                    <th>Review</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {results.map((r) => {
+                  {filteredResults.map((r) => {
                     const pt = patients.find((p) => p.id === r.patient)
                     const ptName = pt ? `${pt.first_name} ${pt.last_name}` : `Patient ${r.patient?.slice ? r.patient.slice(0, 8) : r.patient}`
                     return (
@@ -283,16 +388,27 @@ export default function Laboratory({ me }) {
                         <td>
                           <strong>{ptName}</strong>
                         </td>
+                        <td><span className={`badge ${r.care_type === 'ipd' ? 'badge-blue' : 'badge-gray'}`}>{r.care_type === 'ipd' ? 'IPD' : 'OPD'}</span></td>
+                        <td>{r.test_name || '—'}</td>
                         <td>
                           <strong style={{ color: 'var(--navy)' }}>{r.result}</strong>
                         </td>
                         <td>
                           <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                            {r.reference_range || 'Normal'}
+                            {r.reference_range || '—'}
                           </span>
                         </td>
                         <td>
                           <span className="badge badge-green">{r.status}</span>
+                        </td>
+                        <td>{r.is_current ? r.order_status : 'Superseded'}</td>
+                        <td>
+                          {r.is_current && r.order_status === 'resulted' && canOrder && (
+                            <button type="button" className="btn btn-secondary btn-xs" onClick={() => handleReview(r.order)}>Review</button>
+                          )}{' '}
+                          {r.is_current && ['resulted', 'reviewed'].includes(r.order_status) && canEnterResult && (
+                            <button type="button" className="btn btn-secondary btn-xs" onClick={() => openAmendResultModal(r)}>Correct</button>
+                          )}
                         </td>
                       </tr>
                     )
@@ -318,12 +434,13 @@ export default function Laboratory({ me }) {
               </button>
             </div>
             <form onSubmit={handleCreateOrder} className="panel-body">
+              {error && <div className="alert alert-error" role="alert">{error}</div>}
               <div className="form-group">
                 <label>Select Patient *</label>
                 <select
                   required
                   value={orderForm.patient}
-                  onChange={(e) => setOrderForm({ ...orderForm, patient: e.target.value })}
+                  onChange={(e) => setOrderForm({ ...orderForm, patient: e.target.value, encounter: '' })}
                 >
                   <option value="">-- Choose Patient --</option>
                   {patients.map((p) => (
@@ -343,10 +460,10 @@ export default function Laboratory({ me }) {
                 >
                   <option value="">-- Choose Encounter --</option>
                   {encounters
-                    .filter((e) => !orderForm.patient || e.patient === orderForm.patient)
+                    .filter((e) => !orderForm.patient || String(e.patient) === orderForm.patient)
                     .map((enc) => (
                       <option key={enc.id} value={enc.id}>
-                        Encounter {enc.id.slice(0, 8)} &mdash; {enc.status}
+                        Encounter {enc.id} &mdash; {enc.status}
                       </option>
                     ))}
                 </select>
@@ -355,18 +472,12 @@ export default function Laboratory({ me }) {
               <div className="form-group">
                 <label>Test Panel / Investigation *</label>
                 <select
+                  required
                   value={orderForm.test_name}
                   onChange={(e) => setOrderForm({ ...orderForm, test_name: e.target.value })}
                 >
-                  <option value="Complete Blood Count (CBC)">Complete Blood Count (CBC)</option>
-                  <option value="Basic Metabolic Panel (BMP)">Basic Metabolic Panel (BMP)</option>
-                  <option value="Comprehensive Metabolic Panel (CMP)">Comprehensive Metabolic Panel (CMP)</option>
-                  <option value="Lipid Profile">Lipid Profile</option>
-                  <option value="Liver Function Test (LFT)">Liver Function Test (LFT)</option>
-                  <option value="Urinalysis Routine">Urinalysis Routine</option>
-                  <option value="Blood Glucose Fasting">Blood Glucose Fasting</option>
-                  <option value="HbA1c Glycated Hemoglobin">HbA1c Glycated Hemoglobin</option>
-                  <option value="Rapid Malaria Antigen">Rapid Malaria Antigen</option>
+                  <option value="">-- Choose an active test --</option>
+                  {labTests.map((test) => <option key={test.id} value={test.name}>{test.name}</option>)}
                 </select>
               </div>
 
@@ -392,7 +503,7 @@ export default function Laboratory({ me }) {
         <div className="modal-overlay" onClick={() => setShowResultModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="panel-header">
-              <h3>Enter Laboratory Test Result</h3>
+              <h3>{amendedResult ? 'Correct Laboratory Result' : 'Enter Laboratory Test Result'}</h3>
               <button
                 style={{ border: 0, background: 'none', cursor: 'pointer', color: 'var(--muted)' }}
                 onClick={() => setShowResultModal(false)}
@@ -427,12 +538,12 @@ export default function Laboratory({ me }) {
               </div>
 
               <div className="form-group">
-                <label>Result Verification Status</label>
+                <label>Result Status</label>
                 <select
                   value={resultForm.status}
                   onChange={(e) => setResultForm({ ...resultForm, status: e.target.value })}
                 >
-                  <option value="final">Final (Verified & Signed)</option>
+                  <option value="final">Final</option>
                   <option value="preliminary">Preliminary</option>
                 </select>
               </div>

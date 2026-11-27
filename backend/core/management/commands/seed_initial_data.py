@@ -1,15 +1,11 @@
-"""
-Rich synthetic seed command for OmniHealthcare demo data.
-
-Run:  python manage.py seed_demo
-All passwords:  Password123!
-"""
+"""Load initial organization, staff, and patient records for local setup."""
 
 import random
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
 from django.utils import timezone
 
 from core.models import (
@@ -21,13 +17,17 @@ from core.models import (
     CarePlan,
     ClinicalNote,
     Clinician,
+    ClinicianAvailability,
     Consent,
     Diagnosis,
     DischargeNote,
     Encounter,
     FollowUp,
+    InpatientAdmission,
     LabOrder,
     LabResult,
+    LabTest,
+    Medication,
     MedicalHistory,
     Organization,
     Patient,
@@ -45,25 +45,26 @@ User = get_user_model()
 PASSWORD = "Password123!"
 
 # ---------------------------------------------------------------------------
-# Synthetic patient data
+# Patient records
 # ---------------------------------------------------------------------------
 PATIENT_DATA = [
-    ("Amina",    "Hassan",    "1990-04-12", "Female", "+254-700-100001", "amina.hassan@demo.example"),
-    ("Fatima",   "Ibrahim",   "1985-07-23", "Female", "+254-700-100002", "fatima.ibrahim@demo.example"),
-    ("Yusuf",    "Omondi",    "1978-11-05", "Male",   "+254-700-100003", "yusuf.omondi@demo.example"),
-    ("Nadia",    "Kamau",     "1995-02-14", "Female", "+254-700-100004", "nadia.kamau@demo.example"),
-    ("Omar",     "Mwangi",    "1963-09-30", "Male",   "+254-700-100005", "omar.mwangi@demo.example"),
-    ("Zainab",   "Njoroge",   "2000-05-18", "Female", "+254-700-100006", "zainab.njoroge@demo.example"),
-    ("Khalid",   "Otieno",    "1988-12-01", "Male",   "+254-700-100007", "khalid.otieno@demo.example"),
-    ("Mariam",   "Wanjiku",   "1972-03-27", "Female", "+254-700-100008", "mariam.wanjiku@demo.example"),
-    ("Ibrahim",  "Mutua",     "1992-08-09", "Male",   "+254-700-100009", "ibrahim.mutua@demo.example"),
-    ("Halima",   "Chebet",    "1980-06-15", "Female", "+254-700-100010", "halima.chebet@demo.example"),
+    ("Amina",    "Hassan",    "1990-04-12", "Female", "+254-700-100001", "amina.hassan@omnihealthcare.example"),
+    ("Fatima",   "Ibrahim",   "1985-07-23", "Female", "+254-700-100002", "fatima.ibrahim@omnihealthcare.example"),
+    ("Yusuf",    "Omondi",    "1978-11-05", "Male",   "+254-700-100003", "yusuf.omondi@omnihealthcare.example"),
+    ("Nadia",    "Kamau",     "1995-02-14", "Female", "+254-700-100004", "nadia.kamau@omnihealthcare.example"),
+    ("Omar",     "Mwangi",    "1963-09-30", "Male",   "+254-700-100005", "omar.mwangi@omnihealthcare.example"),
+    ("Zainab",   "Njoroge",   "2000-05-18", "Female", "+254-700-100006", "zainab.njoroge@omnihealthcare.example"),
+    ("Khalid",   "Otieno",    "1988-12-01", "Male",   "+254-700-100007", "khalid.otieno@omnihealthcare.example"),
+    ("Mariam",   "Wanjiku",   "1972-03-27", "Female", "+254-700-100008", "mariam.wanjiku@omnihealthcare.example"),
+    ("Ibrahim",  "Mutua",     "1992-08-09", "Male",   "+254-700-100009", "ibrahim.mutua@omnihealthcare.example"),
+    ("Halima",   "Chebet",    "1980-06-15", "Female", "+254-700-100010", "halima.chebet@omnihealthcare.example"),
 ]
 
 CLINICIAN_DATA = [
-    ("dr_waweru",   "James",   "Waweru",    "General Medicine"),
-    ("dr_muthoni",  "Grace",   "Muthoni",   "Obstetrics & Gynaecology"),
-    ("dr_odhiambo", "Patrick", "Odhiambo",  "Internal Medicine"),
+    ("clinician",   "Lead",    "Clinician", "Cardiology", "Cardiology Department", "Suite 401, Doctor Plaza", "+254-711-100000", "Female", 6000),
+    ("dr_waweru",   "James",   "Waweru",    "General Medicine", "Outpatient Department", "45 Valley Road, Nairobi", "+254-711-200101", "Male", 4500),
+    ("dr_muthoni",  "Grace",   "Muthoni",   "Cardiology", "Cardiology Department", "12 Kenyatta Ave, Nairobi", "+254-711-200102", "Female", 7500),
+    ("dr_odhiambo", "Patrick", "Odhiambo",  "Internal Medicine", "Internal Medicine Dept", "88 Ngong Road, Nairobi", "+254-711-200103", "Male", 5500),
 ]
 
 STAFF_ROLES = [
@@ -148,16 +149,35 @@ def _rand_note(complaint="general malaise", plan="monitor and review", condition
 
 
 class Command(BaseCommand):
-    help = "Seed OmniHealthcare with rich synthetic demo data."
+    help = "Load fictional demo records into an empty, disposable database."
 
+    def add_arguments(self, parser):
+        parser.add_argument("--confirm-disposable-database", action="store_true")
+
+    @transaction.atomic
     def handle(self, *args, **options):
-        self.stdout.write("── Seeding OmniHealthcare demo data ──")
+        if not options["confirm_disposable_database"]:
+            raise CommandError("Use --confirm-disposable-database only on an empty disposable database.")
+        if Organization.objects.exists() or User.objects.exists():
+            raise CommandError("Demo seeding requires an empty database; existing accounts will not be changed.")
+        random.seed(0)
+        self.stdout.write("── Loading OmniHealthcare records ──")
 
         # ── Organization ──────────────────────────────────────────────────────
         org, _ = Organization.objects.get_or_create(
             code="OMNI-DEMO",
-            defaults={"name": "OmniHealthcare Synthetic Demo"},
+            defaults={"name": "OmniHealthcare"},
         )
+        org.name = "OmniHealthcare"
+        org.save(update_fields=["name"])
+        LabTest.objects.bulk_create([
+            LabTest(organization=org, name=name, price_cents=2500)
+            for name, _ in LAB_TESTS
+        ])
+        Medication.objects.bulk_create([
+            Medication(organization=org, name=name)
+            for name, _, _ in MEDICATIONS
+        ])
         self.stdout.write(f"  ✓ Organization: {org.name}")
 
         # ── Staff users ───────────────────────────────────────────────────────
@@ -170,7 +190,7 @@ class Command(BaseCommand):
                     "organization": org,
                     "first_name": first,
                     "last_name": last,
-                    "email": f"{username}@omni.demo",
+                    "email": f"{username}@omnihealthcare.example",
                 },
             )
             u.role = username
@@ -185,7 +205,7 @@ class Command(BaseCommand):
 
         # ── Clinician users + Clinician records ───────────────────────────────
         clinicians = []
-        for username, first, last, specialty in CLINICIAN_DATA:
+        for username, first, last, specialty, department, address, phone, sex, price in CLINICIAN_DATA:
             u, _ = User.objects.get_or_create(
                 username=username,
                 defaults={
@@ -193,7 +213,7 @@ class Command(BaseCommand):
                     "organization": org,
                     "first_name": first,
                     "last_name": last,
-                    "email": f"{username}@omni.demo",
+                    "email": f"{username}@omnihealthcare.example",
                 },
             )
             u.role = "clinician"
@@ -203,20 +223,51 @@ class Command(BaseCommand):
             u.set_password(PASSWORD)
             u.save()
             clin, _ = Clinician.objects.get_or_create(
-                user=u, defaults={"organization": org, "specialty": specialty}
+                user=u,
+                defaults={
+                    "organization": org,
+                    "name": f"Dr. {first} {last}",
+                    "department": department,
+                    "specialty": specialty,
+                    "address": address,
+                    "phone": phone,
+                    "sex": sex,
+                    "opd_consultation_price": price,
+                },
             )
             clin.organization = org
+            clin.name = f"Dr. {first} {last}"
+            clin.department = department
             clin.specialty = specialty
+            clin.address = address
+            clin.phone = phone
+            clin.sex = sex
+            clin.opd_consultation_price = price
             clin.save()
             clinicians.append(clin)
 
         self.stdout.write(f"  ✓ Clinicians: {len(clinicians)}")
+        for clinician in clinicians:
+            for weekday in range(5):
+                ClinicianAvailability.objects.get_or_create(
+                    organization=org,
+                    clinician=clinician,
+                    weekday=weekday,
+                    starts_at=time(9, 0),
+                    defaults={"ends_at": time(17, 0), "active": True},
+                )
 
         # ── 10 Patients + patient user accounts ──────────────────────────────
         patients = []
+        statuses = ["registered", "vitals_recorded", "in_consultation", "investigations_pending", "completed"]
         for idx, (first, last, dob, sex, phone, email) in enumerate(PATIENT_DATA, start=1):
             mrn = f"MRN-{idx:04d}"
             username = f"patient_{first.lower()}"
+            assigned_doc = clinicians[idx % len(clinicians)]
+            opd_st = statuses[idx % len(statuses)]
+            birth_year = int(dob.split("-")[0])
+            calc_age = timezone.now().year - birth_year
+
             pu, _ = User.objects.get_or_create(
                 username=username,
                 defaults={
@@ -238,35 +289,52 @@ class Command(BaseCommand):
                 medical_record_number=mrn,
                 defaults={
                     "organization": org,
-                    "first_name": f"Demo {first}",
+                    "first_name": first,
                     "last_name": last,
                     "date_of_birth": dob,
+                    "age": calc_age,
                     "sex": sex,
                     "phone": phone,
                     "email": email,
                     "owner": pu,
+                    "is_opd": True,
+                    "opd_status": opd_st,
+                    "assigned_clinician": assigned_doc,
                 },
             )
+            pt.first_name = first
+            pt.last_name = last
+            pt.date_of_birth = dob
+            pt.sex = sex
+            pt.phone = phone
+            pt.email = email
+            pt.age = calc_age
+            pt.is_opd = True
+            pt.opd_status = opd_st
+            pt.assigned_clinician = assigned_doc
+            pt.save()
             pu.patient_id = pt.pk
             pu.save()
             patients.append(pt)
 
         self.stdout.write(f"  ✓ Patients: {len(patients)}")
 
-        # ── 5 Extra demo patient users (no linked Patient record – for testing) ──
+        # ── Additional patient portal accounts ────────────────────────────────
         for i in range(1, 6):
-            u, _ = User.objects.get_or_create(
-                username=f"demo_patient_{i}",
-                defaults={
-                    "role": "patient",
-                    "organization": org,
-                    "first_name": f"Demo{i}",
-                    "last_name": "User",
-                    "email": f"demo_patient_{i}@omni.demo",
-                },
-            )
+            username = f"patient_portal_{i}"
+            legacy_user = User.objects.filter(username=f"demo_patient_{i}").first()
+            u = User.objects.filter(username=username).first()
+            if u is None and legacy_user:
+                legacy_user.username = username
+                u = legacy_user
+            elif u is None:
+                u = User.objects.create_user(username=username, password=PASSWORD)
+            u.username = username
             u.role = "patient"
             u.organization = org
+            u.first_name = "Patient"
+            u.last_name = f"Account {i}"
+            u.email = f"patient_{i}@omnihealthcare.example"
             u.set_password(PASSWORD)
             u.save()
 
@@ -320,9 +388,12 @@ class Command(BaseCommand):
                 defaults={
                     "patient": pt,
                     "status": status,
-                    "reason": f"Demo visit – {random.choice(['check-up', 'follow-up', 'acute complaint', 'lab review'])}",
+                    "reason": random.choice(["Routine consultation", "Follow-up", "Acute complaint", "Lab review"]),
                 },
             )
+            if "synthetic" in appt.reason.lower() or appt.reason.startswith("Demo visit"):
+                appt.reason = "Routine consultation"
+                appt.save(update_fields=["reason"])
             appointments.append(appt)
             appt_index += 1
 
@@ -341,9 +412,22 @@ class Command(BaseCommand):
                 organization=org,
                 clinician=clin,
                 starts_at=starts_at,
-                defaults={"patient": pt, "status": status, "reason": "Synthetic demo booking"},
+                defaults={"patient": pt, "status": status, "reason": "Routine consultation"},
             )
             appointments.append(appt)
+
+        Appointment.objects.filter(
+            organization=org,
+            reason__istartswith="Demo visit",
+        ).update(reason="Routine consultation")
+        Appointment.objects.filter(
+            organization=org,
+            reason__istartswith="Synthetic demo",
+        ).update(reason="Routine consultation")
+        Appointment.objects.filter(
+            organization=org,
+            reason__icontains="synthetic",
+        ).update(reason="Routine consultation")
 
         self.stdout.write(f"  ✓ Appointments: {Appointment.objects.filter(organization=org).count()}")
 
@@ -438,11 +522,11 @@ class Command(BaseCommand):
                 organization=org, encounter=enc, patient=enc.patient, test_name=test,
                 defaults={
                     "ordered_by": enc.clinician.user,
-                    "status": random.choice(["ordered", "in_progress", "reviewed"]),
+                    "status": "resulted" if idx % 2 else "ordered",
                 },
             )
             lab_orders.append(order)
-            if order.status in ("reviewed",):
+            if order.status == "resulted":
                 LabResult.objects.get_or_create(
                     organization=org, order=order, patient=enc.patient,
                     defaults={
@@ -493,21 +577,39 @@ class Command(BaseCommand):
             ("Ward B – Maternity", "First Floor"),
             ("ICU",               "Second Floor"),
         ]
-        for wname, wloc in ward_data:
+        for ward_index, (wname, wloc) in enumerate(ward_data):
             ward, _ = Ward.objects.get_or_create(
                 organization=org, name=wname, defaults={"location": wloc}
             )
             for bed_num in range(1, 5):
                 label = f"{wname[0]}-{bed_num:02d}"
-                is_occupied = bed_num <= 2
-                pt = patients[bed_num - 1] if is_occupied else None
-                Bed.objects.get_or_create(
+                patient_index = ward_index * 2 + bed_num - 1
+                pt = patients[patient_index] if bed_num <= 2 and patient_index < len(patients) else None
+                bed, _ = Bed.objects.get_or_create(
                     organization=org, ward=ward, label=label,
                     defaults={
-                        "status": "occupied" if is_occupied else "available",
-                        "patient": pt,
+                        "status": "available",
+                        "patient": None,
+                        "daily_rate_cents": 0,
                     },
                 )
+                if pt and bed.status == "available" and not InpatientAdmission.objects.filter(
+                    patient=pt, discharged_at__isnull=True
+                ).exists():
+                    clinician = pt.assigned_clinician
+                    if clinician:
+                        bed.patient = pt
+                        bed.status = "occupied"
+                        bed.save(update_fields=["patient", "status", "updated_at"])
+                        InpatientAdmission.objects.create(
+                            organization=org,
+                            patient=pt,
+                            bed=bed,
+                            clinician=clinician,
+                            department=clinician.department or clinician.specialty,
+                            room_rate_cents=bed.daily_rate_cents,
+                            admitted_at=timezone.now() - timedelta(hours=patient_index * 3),
+                        )
 
         self.stdout.write("  ✓ Wards & beds seeded")
 
@@ -586,9 +688,9 @@ class Command(BaseCommand):
         self.stdout.write("  ✓ Discharge notes seeded")
 
         # ── Proxy grants (family access) ──────────────────────────────────────
-        # Grant demo_patient_1 proxy access to first 2 patients
+        # Grant a patient portal account access to the first 2 patients
         try:
-            proxy_user = User.objects.get(username="demo_patient_1")
+            proxy_user = User.objects.get(username="patient_portal_1")
             for pt in patients[:2]:
                 ProxyGrant.objects.get_or_create(
                     organization=org, patient=pt, grantee=proxy_user,
@@ -634,14 +736,11 @@ class Command(BaseCommand):
                 action=action_name,
                 resource_type=resource_type,
                 resource_id=str(encounters[0].pk),
-                details={"synthetic": True},
+                details={},
             )
 
         self.stdout.write("  ✓ Audit events seeded")
 
         self.stdout.write(self.style.SUCCESS(
-            "\n✅  OmniHealthcare demo data seeded successfully!\n"
-            "   Login credentials — username: <role>  |  password: Password123!\n"
-            "   Patient logins:    patient_amina, patient_fatima, etc.\n"
-            "   Clinician logins:  dr_waweru, dr_muthoni, dr_odhiambo\n"
+            "\n✅  OmniHealthcare records loaded successfully.\n"
         ))

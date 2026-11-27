@@ -18,7 +18,7 @@ import {
   getEncounters
 } from '../api'
 
-export default function Referrals({ me }) {
+export default function Referrals({ me, listFilters }) {
   const [referrals, setReferrals] = useState([])
   const [patients, setPatients] = useState([])
   const [encounters, setEncounters] = useState([])
@@ -102,11 +102,7 @@ export default function Referrals({ me }) {
     <div className="referrals-screen">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">MODULE F08</span>
-          <h1>Clinical Referral Management & Specialist Tracking</h1>
-          <p style={{ color: 'var(--muted)', fontSize: '13px' }}>
-            External destination centers, clinical handover summaries, specialty consultations, and cross-facility continuity.
-          </p>
+          <h1>Referrals</h1>
         </div>
         <div className="page-actions">
           {canCreate && (
@@ -117,6 +113,7 @@ export default function Referrals({ me }) {
         </div>
       </div>
 
+      {listFilters}
       {error && (
         <div className="alert alert-error">
           <AlertTriangle size={16} />
