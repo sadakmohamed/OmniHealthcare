@@ -194,7 +194,7 @@ export default function App() {
         <div className="brand">
           <img src="/logo.png" alt="OmniTeckno" onError={(e) => { e.target.style.display = 'none' }} />
           <div className="brand-text">
-            <strong>OmniHealthcare</strong>
+            <strong>OmniHealth</strong>
           </div>
         </div>
 
@@ -257,7 +257,7 @@ export default function App() {
             {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
           <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--navy)' }}>
-            OmniHealthcare
+            OmniHealth
           </div>
         </header>
 
@@ -434,7 +434,7 @@ function LoginView({ onLogin, initialMessage }) {
             <div className="login-logo">
               <img src="/logo.png" alt="OmniTeckno" />
             </div>
-            <h1>OmniHealthcare</h1>
+            <h1>OmniHealth</h1>
             <p>Care connected, every step of the way.</p>
           </div>
 
@@ -528,6 +528,7 @@ function LoginView({ onLogin, initialMessage }) {
                     <input
                       type="text"
                       required
+                      placeholder="e.g. Amina"
                       value={regForm.first_name}
                       onChange={(e) => setRegForm({ ...regForm, first_name: e.target.value })}
                     />
@@ -537,6 +538,7 @@ function LoginView({ onLogin, initialMessage }) {
                     <input
                       type="text"
                       required
+                      placeholder="e.g. Hassan"
                       value={regForm.last_name}
                       onChange={(e) => setRegForm({ ...regForm, last_name: e.target.value })}
                     />
@@ -550,6 +552,7 @@ function LoginView({ onLogin, initialMessage }) {
                       id="register-username"
                       type="text"
                       required
+                      placeholder="Choose a username"
                       value={regForm.username}
                       onChange={(e) => setRegForm({ ...regForm, username: e.target.value })}
                     />
@@ -560,6 +563,7 @@ function LoginView({ onLogin, initialMessage }) {
                       id="register-date-of-birth"
                       type="date"
                       required
+                      placeholder="Select date of birth"
                       value={regForm.date_of_birth}
                       onChange={(e) => setRegForm({ ...regForm, date_of_birth: e.target.value })}
                     />
@@ -587,6 +591,7 @@ function LoginView({ onLogin, initialMessage }) {
                       id="register-phone"
                       type="tel"
                       required
+                      placeholder="e.g. 0612345678"
                       value={regForm.phone}
                       onChange={(e) => setRegForm({ ...regForm, phone: e.target.value })}
                     />
@@ -598,6 +603,7 @@ function LoginView({ onLogin, initialMessage }) {
                     <label>Email Address</label>
                     <input
                       type="email"
+                      placeholder="e.g. name@example.com"
                       value={regForm.email}
                       onChange={(e) => setRegForm({ ...regForm, email: e.target.value })}
                     />
@@ -609,6 +615,7 @@ function LoginView({ onLogin, initialMessage }) {
                       type="password"
                       required
                       autoComplete="new-password"
+                      placeholder="Create a password"
                       value={regForm.password}
                       onChange={(e) => setRegForm({ ...regForm, password: e.target.value })}
                     />

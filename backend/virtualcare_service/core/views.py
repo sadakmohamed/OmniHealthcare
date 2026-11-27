@@ -98,8 +98,8 @@ class VirtualCareRegistrationView(APIView):
         password = request.data.get("password", "")
         if not username or not display_name:
             raise ValidationError({"detail": "Username and name are required."})
-        if len(password) < 12:
-            raise ValidationError({"password": "Use a password with at least 12 characters."})
+        if len(password) < 8:
+            raise ValidationError({"password": "Use a password with at least 8 characters."})
         if not VirtualCareAccount.objects.filter(
             organization=organization, role=VirtualCareAccount.Role.ADMIN, is_active=True
         ).exists():
@@ -162,8 +162,8 @@ class VirtualCareBootstrapView(APIView):
         password = request.data.get("password", "")
         if not organization or not username or not display_name:
             raise ValidationError({"detail": "Organization, username, and name are required."})
-        if len(password) < 12:
-            raise ValidationError({"password": "Use a password with at least 12 characters."})
+        if len(password) < 8:
+            raise ValidationError({"password": "Use a password with at least 8 characters."})
         if VirtualCareAccount.objects.filter(
             organization=organization, role=VirtualCareAccount.Role.ADMIN
         ).exists():
@@ -243,8 +243,8 @@ class VirtualCareDirectoryView(APIView):
         password = request.data.get("password", "")
         if not username or not display_name:
             raise ValidationError({"detail": "Username and name are required."})
-        if len(password) < 12:
-            raise ValidationError({"password": "Use a password with at least 12 characters."})
+        if len(password) < 8:
+            raise ValidationError({"password": "Use a password with at least 8 characters."})
         account_id = uuid.uuid4()
         try:
             account = VirtualCareAccount.objects.create(
@@ -298,8 +298,8 @@ class VirtualCareAccountDetailView(APIView):
             account.is_active = is_active
             changed.append("is_active")
         if "password" in request.data:
-            if len(request.data["password"]) < 12:
-                raise ValidationError({"password": "Use a password with at least 12 characters."})
+            if len(request.data["password"]) < 8:
+                raise ValidationError({"password": "Use a password with at least 8 characters."})
             account.password = make_password(request.data["password"])
             changed.append("password")
         if not changed:
@@ -340,8 +340,8 @@ class VirtualCareProfileView(APIView):
         if "new_password" in request.data:
             if not check_password(request.data.get("current_password", ""), account.password):
                 raise ValidationError({"current_password": "The current password is incorrect."})
-            if len(request.data["new_password"]) < 12:
-                raise ValidationError({"new_password": "Use a password with at least 12 characters."})
+            if len(request.data["new_password"]) < 8:
+                raise ValidationError({"new_password": "Use a password with at least 8 characters."})
             account.password = make_password(request.data["new_password"])
             changed.append("password")
         if not changed:

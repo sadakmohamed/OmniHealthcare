@@ -122,8 +122,8 @@ function AuthScreen({ onSignedIn }) {
       <div className="login-form-panel">
         <div className="auth-card">
           <div className="login-brand">
-            <div className="login-logo"><img src="/logo.png" alt="OmniHealthcare" /></div>
-            <h1>OmniHealthcare</h1>
+            <div className="login-logo"><img src="/logo.png" alt="OmniHealth" /></div>
+            <h1>OmniHealth</h1>
             <p>Virtual Care</p>
           </div>
           <div className="panel auth-panel">
@@ -172,17 +172,17 @@ function AuthScreen({ onSignedIn }) {
             <label htmlFor="vc-password">Password</label>
             <div className="password-input-wrap">
               <input
-                id="vc-password" required minLength={mode === 'login' ? undefined : 12}
+                id="vc-password" required minLength={mode === 'login' ? undefined : 8}
                 type={showPassword ? 'text' : 'password'}
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 value={form.password} onChange={set('password')}
-                placeholder={mode === 'login' ? 'Enter your password' : 'At least 12 characters'}
+                placeholder={mode === 'login' ? 'Enter your password' : 'At least 8 characters'}
               />
               <button type="button" className="password-toggle" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword(!showPassword)}>
                 {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
               </button>
             </div>
-            {mode !== 'login' && <small className="form-hint">Use at least 12 characters.</small>}
+            {mode !== 'login' && <small className="form-hint">            Use at least 8 characters.</small>}
           </div>
 
           <button className="btn btn-primary login-submit" type="submit" disabled={loading || (!status && !error)}>
@@ -228,7 +228,7 @@ function Shell({ user, onSignOut, onProfileUpdated }) {
     <div className="vc-shell">
       <aside className="vc-sidebar">
         <div className="vc-sidebar-brand">
-          <img src="/logo.png" alt="OmniHealthcare" />
+          <img src="/logo.png" alt="OmniHealth" />
           <span>Virtual Care</span>
         </div>
         <nav>
@@ -428,10 +428,10 @@ function AccountsPage({ me, kind }) {
   }
 
   function resetPassword(account) {
-    const password = window.prompt(`New password for ${account.username} (at least 12 characters)`)
+    const password = window.prompt(`New password for ${account.username}     (at least 8 characters)`)
     if (!password) return
-    if (password.length < 12) {
-      setError('Password must be at least 12 characters.')
+        if (password.length < 8) {
+          setError('Password must be at least 8 characters.')
       return
     }
     change(account, { password }, `Password reset for ${account.display_name}. Share it securely.`)
@@ -564,14 +564,21 @@ function AccountModal({ title, kind, account, roles, onClose, onSaved }) {
     }
   }
 
+  const roleIcon = { clinician: Stethoscope, patient: Users, admin: UserCog, receptionist: UserCog }[form.role] || UserRound
+  const RoleIcon = roleIcon
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(event) => event.stopPropagation()}>
-        <div className="panel-header">
-          <h3>{title}</h3>
+      <div className="modal vc-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="vc-modal-head">
+          <div className="vc-modal-icon"><RoleIcon size={22} /></div>
+          <div>
+            <h3>{title}</h3>
+            <p>{account ? 'Update the details below.' : 'Fill in the details to create the account.'}</p>
+          </div>
           <button type="button" className="icon-button" onClick={onClose} aria-label="Close"><X size={18} /></button>
         </div>
-        <form className="panel-body" onSubmit={submit}>
+        <form className="vc-modal-body" onSubmit={submit}>
           {error && <div className="alert alert-error">{error}</div>}
           {!account && kind === 'staff' && (
             <div className="form-group">
@@ -581,30 +588,26 @@ function AccountModal({ title, kind, account, roles, onClose, onSaved }) {
               </select>
             </div>
           )}
-          <div className="form-group"><label>Full name *</label><input required value={form.display_name} onChange={set('display_name')} /></div>
+          <div className="form-group"><label>Full name *</label><input required placeholder={isDoctor ? 'e.g. Dr. Ahmed Ali' : 'e.g. Amina Hassan'} value={form.display_name} onChange={set('display_name')} /></div>
           <div className="form-row">
-            <div className="form-group"><label>Username *</label><input required value={form.username} onChange={set('username')} /></div>
-            <div className="form-group"><label>Phone</label><input type="tel" value={form.phone} onChange={set('phone')} /></div>
+            <div className="form-group"><label>Username *</label><input required placeholder="e.g. amina.h" autoComplete="off" value={form.username} onChange={set('username')} /></div>
+            <div className="form-group"><label>Phone</label><input type="tel" placeholder="e.g. 0612345678" value={form.phone} onChange={set('phone')} /></div>
           </div>
           {isDoctor && (
-            <div className="form-group"><label>Specialty</label><input value={form.specialty} onChange={set('specialty')} placeholder="e.g. General practice" /></div>
+            <div className="form-group"><label>Specialty</label><input value={form.specialty} onChange={set('specialty')} placeholder="e.g. General practice, Cardiology" /></div>
           )}
           {!account && (
             <div className="form-group">
               <label>Temporary password *</label>
-              <input type="password" required minLength={12} value={form.password} onChange={set('password')} />
-              <small className="form-hint">At least 12 characters.</small>
+              <input type="password" required minLength={8} autoComplete="new-password" placeholder="At least 8 characters" value={form.password} onChange={set('password')} />
+              <small className="form-hint">Share it securely; they can change it from My profile.</small>
             </div>
           )}
           <div className="form-actions">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            <button className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : account ? 'Save changes' : 'Create'}</button>
+            <button className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : account ? 'Save changes' : 'Create account'}</button>
           </div>
         </form>
-      <div className="auth-switch">
-        <span>Hospital staff or patient?</span>
-        <button type="button" onClick={() => { window.location.href = '/' }}>Back to hospital login</button>
-      </div>
       </div>
     </div>
   )
@@ -645,16 +648,16 @@ function Profile({ user, onUpdated }) {
         <form className="panel" onSubmit={saveDetails}>
           <div className="panel-header"><h3>Details</h3></div>
           <div className="panel-body">
-            <div className="form-group"><label>Full name</label><input required value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} /></div>
-            <div className="form-group"><label>Phone</label><input type="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></div>
+            <div className="form-group"><label>Full name</label>            <input required placeholder="Your full name" value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} /></div>
+                        <div className="form-group"><label>Phone</label><input type="tel" placeholder="e.g. 0612345678" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></div>
             <button className="btn btn-primary">Save details</button>
           </div>
         </form>
         <form className="panel" onSubmit={savePassword}>
           <div className="panel-header"><h3>Change password</h3></div>
           <div className="panel-body">
-            <div className="form-group"><label>Current password</label><input type="password" required autoComplete="current-password" value={passwords.current_password} onChange={(event) => setPasswords({ ...passwords, current_password: event.target.value })} /></div>
-            <div className="form-group"><label>New password</label><input type="password" required minLength={12} autoComplete="new-password" value={passwords.new_password} onChange={(event) => setPasswords({ ...passwords, new_password: event.target.value })} /><small className="form-hint">At least 12 characters.</small></div>
+            <div className="form-group"><label>Current password</label><input type="password" required autoComplete="current-password" placeholder="Enter your current password" value={passwords.current_password} onChange={(event) => setPasswords({ ...passwords, current_password: event.target.value })} /></div>
+            <div className="form-group"><label>New password</label><input type="password" required minLength={8} autoComplete="new-password" placeholder="At least 8 characters" value={passwords.new_password} onChange={(event) => setPasswords({ ...passwords, new_password: event.target.value })} /><small className="form-hint">At least 8 characters.</small></div>
             <button className="btn btn-primary">Change password</button>
           </div>
         </form>

@@ -1,4 +1,4 @@
-# OmniHealthcare
+# OmniHealth
 
 > Local records are for development only. Do not enter real patient information or use this system for clinical decisions.
 
@@ -640,4 +640,4 @@ booked/intake/waiting → cancelled
 
 ---
 
-*OmniHealthcare — 23 November 2026*
+*OmniHealth — 23 November 2026*

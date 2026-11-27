@@ -63,7 +63,7 @@ class UserAdmin(BaseUserAdmin):
     search_fields = ("username", "first_name", "last_name", "email")
     fieldsets = BaseUserAdmin.fieldsets + (
         (
-            "OmniHealthcare",
+            "OmniHealth",
             {"fields": ("role", "organization", "patient")},
         ),
     )

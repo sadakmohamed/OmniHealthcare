@@ -1,4 +1,4 @@
-# OmniHealthcare Architecture
+# OmniHealth Architecture
 
 ## Runtime
 

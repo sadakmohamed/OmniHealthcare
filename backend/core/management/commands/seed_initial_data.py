@@ -161,14 +161,14 @@ class Command(BaseCommand):
         if Organization.objects.exists() or User.objects.exists():
             raise CommandError("Demo seeding requires an empty database; existing accounts will not be changed.")
         random.seed(0)
-        self.stdout.write("── Loading OmniHealthcare records ──")
+        self.stdout.write("── Loading OmniHealth records ──")
 
         # ── Organization ──────────────────────────────────────────────────────
         org, _ = Organization.objects.get_or_create(
             code="OMNI-DEMO",
-            defaults={"name": "OmniHealthcare"},
+            defaults={"name": "OmniHealth"},
         )
-        org.name = "OmniHealthcare"
+        org.name = "OmniHealth"
         org.save(update_fields=["name"])
         LabTest.objects.bulk_create([
             LabTest(organization=org, name=name, price_cents=2500)
