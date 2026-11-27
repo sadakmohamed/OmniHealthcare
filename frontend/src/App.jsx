@@ -419,6 +419,13 @@ function LoginView({ onLogin, initialMessage }) {
     }
   }
 
+  const authTabs = (
+    <div className="vc-tabs" role="tablist">
+      <button type="button" role="tab" aria-selected={!showRegister} className={!showRegister ? 'active' : ''} onClick={() => { setShowRegister(false); setError('') }}>Sign in</button>
+      <button type="button" role="tab" aria-selected={showRegister} className={showRegister ? 'active' : ''} onClick={() => { setShowRegister(true); setError('') }}>New patient</button>
+    </div>
+  )
+
   return (
     <div className="login-page">
       <div className="login-form-panel">
@@ -452,6 +459,7 @@ function LoginView({ onLogin, initialMessage }) {
           ) : !showRegister ? (
             <div className="panel auth-panel">
               <h2>Sign in</h2>
+              {authTabs}
               {error && <div className="alert alert-error">{error}</div>}
               {regSuccess && <div className="alert alert-success">{regSuccess}</div>}
 
@@ -502,10 +510,6 @@ function LoginView({ onLogin, initialMessage }) {
                 </button>
               </form>
               <div className="auth-switch">
-                <span>New patient?</span>
-                <button type="button" onClick={() => setShowRegister(true)}>Create account</button>
-              </div>
-              <div className="auth-switch">
                 <span>Remote consultation?</span>
                 <button type="button" onClick={() => { window.location.href = '/virtual-care' }}>Virtual Care</button>
               </div>
@@ -513,6 +517,7 @@ function LoginView({ onLogin, initialMessage }) {
           ) : (
             <div className="panel auth-panel">
               <h2>Create account</h2>
+              {authTabs}
 
               {error && <div className="alert alert-error">{error}</div>}
 
@@ -610,24 +615,20 @@ function LoginView({ onLogin, initialMessage }) {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setShowRegister(false)}
-                  >
-                    Back to Sign In
-                  </button>
+                <div style={{ marginTop: '16px' }}>
                   <button
                     type="submit"
-                    className="btn btn-primary"
-                    style={{ flex: 1, justifyContent: 'center' }}
+                    className="btn btn-primary login-submit"
                     disabled={loading}
                   >
                     {loading ? 'Creating...' : 'Create account'}
                   </button>
                 </div>
               </form>
+              <div className="auth-switch">
+                <span>Remote consultation?</span>
+                <button type="button" onClick={() => { window.location.href = '/virtual-care' }}>Virtual Care</button>
+              </div>
             </div>
           )}
         </div>
