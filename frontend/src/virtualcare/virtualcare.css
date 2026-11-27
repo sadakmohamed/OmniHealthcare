@@ -56,3 +56,33 @@
   .vc-sidebar { position: static; height: auto; }
   .vc-sidebar nav { grid-auto-flow: column; overflow-x: auto; }
 }
+
+/* Lighter, smaller type and tighter spacing on small screens */
+.vc-auth-card h2, .login-page .auth-panel h2 { font-weight: 600; }
+.vc-tabs button { font-weight: 500; }
+.vc-shell h1, .vc-shell h2, .vc-shell h3 { font-weight: 600; }
+.vc-content, .vc-topbar { overflow-wrap: anywhere; }
+.vc-content .table-wrap { overflow-x: auto; }
+@media (max-width: 640px) {
+  html { font-size: 15px; }
+  .login-page .login-brand h1 { font-size: 22px; font-weight: 600; }
+  .login-page .login-brand p, .vc-muted { font-size: 13px; }
+  .login-page .auth-card { padding: 16px; }
+  .login-page .auth-panel { padding: 18px; }
+  .login-page .auth-panel h2 { font-size: 19px; }
+  .login-page label { font-weight: 500; font-size: 13px; }
+  .vc-content { padding: 14px; }
+  .vc-topbar { padding: 10px 14px; }
+  .vc-hero-banner { padding: 18px; }
+  .vc-hero-banner h1 { font-size: 20px; }
+  .vc-hero-actions, .vc-hero-actions .btn { width: 100%; }
+  .vc-grid-2 { grid-template-columns: 1fr; }
+  .vc-shell .page-heading h1 { font-size: 20px; }
+  .vc-shell .stat-value { font-size: 22px; }
+  .vc-user strong { font-size: 13px; font-weight: 600; }
+  .vc-sidebar { padding: 10px; }
+  .vc-sidebar button { padding: 8px 10px; font-size: 13px; white-space: nowrap; }
+  .vc-sidebar nav { grid-auto-flow: column; overflow-x: auto; }
+  .vc-sidebar-brand { margin-bottom: 8px; }
+  .vc-actions .btn { font-size: 12px; }
+}

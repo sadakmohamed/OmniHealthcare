@@ -143,7 +143,7 @@ function AuthScreen({ onSignedIn }) {
           {mode === 'setup' && (
             <div className="form-group">
               <label htmlFor="vc-key">Setup key</label>
-              <input id="vc-key" type="password" required value={form.bootstrap_key} onChange={set('bootstrap_key')} />
+              <input id="vc-key" type="password" required placeholder="Enter the setup key" value={form.bootstrap_key} onChange={set('bootstrap_key')} />
             </div>
           )}
           {needsOrganization && (
@@ -155,18 +155,18 @@ function AuthScreen({ onSignedIn }) {
           {(mode === 'register' || mode === 'setup') && (
             <div className="form-group">
               <label htmlFor="vc-name">{mode === 'setup' ? 'Administrator name' : 'Full name'}</label>
-              <input id="vc-name" required value={form.display_name} onChange={set('display_name')} />
+              <input id="vc-name" required placeholder={mode === 'setup' ? 'e.g. Clinic Administrator' : 'e.g. Amina Hassan'} value={form.display_name} onChange={set('display_name')} />
             </div>
           )}
           {mode === 'register' && (
             <div className="form-group">
               <label htmlFor="vc-phone">Phone</label>
-              <input id="vc-phone" type="tel" value={form.phone} onChange={set('phone')} />
+              <input id="vc-phone" type="tel" placeholder="e.g. 0612345678" value={form.phone} onChange={set('phone')} />
             </div>
           )}
           <div className="form-group">
             <label htmlFor="vc-username">Username</label>
-            <input id="vc-username" required autoComplete="username" value={form.username} onChange={set('username')} />
+            <input id="vc-username" required autoComplete="username" placeholder={mode === 'login' ? 'Enter your username' : 'Choose a username'} value={form.username} onChange={set('username')} />
           </div>
           <div className="form-group">
             <label htmlFor="vc-password">Password</label>
@@ -176,6 +176,7 @@ function AuthScreen({ onSignedIn }) {
                 type={showPassword ? 'text' : 'password'}
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
                 value={form.password} onChange={set('password')}
+                placeholder={mode === 'login' ? 'Enter your password' : 'At least 12 characters'}
               />
               <button type="button" className="password-toggle" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword(!showPassword)}>
                 {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
@@ -237,7 +238,6 @@ function Shell({ user, onSignOut, onProfileUpdated }) {
             </button>
           ))}
         </nav>
-        <button onClick={() => { window.location.href = '/' }}><LayoutDashboard size={18} /> Hospital login</button>
         <button className="vc-signout" onClick={onSignOut}><LogOut size={18} /> Sign out</button>
       </aside>
 
