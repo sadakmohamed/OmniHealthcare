@@ -193,6 +193,10 @@ function AuthScreen({ onSignedIn }) {
             <p className="vc-muted">Setup is disabled. Set VIRTUALCARE_BOOTSTRAP_KEY on the service first.</p>
           )}
         </form>
+          <div className="auth-switch">
+            <span>Hospital staff or patient?</span>
+            <button type="button" onClick={() => { window.location.href = '/' }}>Back to hospital login</button>
+          </div>
           </div>
         </div>
       </div>
@@ -233,6 +237,7 @@ function Shell({ user, onSignOut, onProfileUpdated }) {
             </button>
           ))}
         </nav>
+        <button onClick={() => { window.location.href = '/' }}><LayoutDashboard size={18} /> Hospital login</button>
         <button className="vc-signout" onClick={onSignOut}><LogOut size={18} /> Sign out</button>
       </aside>
 
@@ -596,6 +601,10 @@ function AccountModal({ title, kind, account, roles, onClose, onSaved }) {
             <button className="btn btn-primary" disabled={saving}>{saving ? 'Saving…' : account ? 'Save changes' : 'Create'}</button>
           </div>
         </form>
+      <div className="auth-switch">
+        <span>Hospital staff or patient?</span>
+        <button type="button" onClick={() => { window.location.href = '/' }}>Back to hospital login</button>
+      </div>
       </div>
     </div>
   )
