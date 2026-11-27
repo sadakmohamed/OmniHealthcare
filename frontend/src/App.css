@@ -1,14 +1,14 @@
 /* ═══════════════════════════════════════════════════════
    OmniHealthcare — App.css
    Brand: OmniTeckno
-   Primary: #1a3c5e   Accent: #00a8e8
+   Primary: #0f172a   Accent: #00a8e8
    ═══════════════════════════════════════════════════════ */
 
 /* ── Reset & base ─────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --primary:  #1a3c5e;
+  --primary:  #0f172a;
   --accent:   #00a8e8;
   --accent-h: #0090cc;
   --success:  #22c55e;
@@ -74,7 +74,7 @@ input, select, textarea { font-family: inherit; font-size: 14px; }
   border-bottom: 1px solid rgba(255,255,255,.1);
   min-height: var(--topbar-h);
 }
-.brand img { width: 40px; height: 40px; object-fit: contain; border-radius: 8px; background: rgba(255,255,255,.12); padding: 4px; }
+.brand img { width: 80px; height: 80px; object-fit: contain; border-radius: 8px; padding: 4px; }
 .brand-text strong { display: block; font-size: 15px; color: #fff; }
 .brand-text span { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--accent); margin-top: 1px; }
 
