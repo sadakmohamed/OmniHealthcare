@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import {
-  CalendarClock, Eye, EyeOff, HeartPulse, LayoutDashboard, LogOut, Lock, Plus, Search,
+  CalendarClock, Eye, EyeOff, HeartPulse, LayoutDashboard, LogOut, Lock, Menu, Plus, Search,
   ShieldCheck, Stethoscope, UserCog, UserRound, Users, Video, X
 } from 'lucide-react'
 import {
@@ -223,17 +223,20 @@ function navFor(role) {
 
 function Shell({ user, onSignOut, onProfileUpdated }) {
   const [page, setPage] = useState('overview')
+  const [menuOpen, setMenuOpen] = useState(false)
 
   return (
     <div className="vc-shell">
-      <aside className="vc-sidebar">
+      {menuOpen && <div className="vc-backdrop" onClick={() => setMenuOpen(false)} />}
+      <aside className={`vc-sidebar${menuOpen ? ' open' : ''}`}>
         <div className="vc-sidebar-brand">
           <img src="/logo.png" alt="OmniHealth" />
           <span>Virtual Care</span>
+          <button className="vc-sidebar-close" aria-label="Close menu" onClick={() => setMenuOpen(false)}><X size={18} /></button>
         </div>
         <nav>
           {navFor(user.role).map((item) => (
-            <button key={item.id} className={page === item.id ? 'active' : ''} onClick={() => setPage(item.id)}>
+            <button key={item.id} className={page === item.id ? 'active' : ''} onClick={() => { setPage(item.id); setMenuOpen(false) }}>
               <item.icon size={18} /> {item.label}
             </button>
           ))}
@@ -243,6 +246,7 @@ function Shell({ user, onSignOut, onProfileUpdated }) {
 
       <div className="vc-main">
         <header className="vc-topbar">
+          <button className="vc-menu-btn" aria-label="Open menu" onClick={() => setMenuOpen(true)}><Menu size={22} /></button>
           <div className="vc-org-chip"><ShieldCheck size={14} /> {user.organization_id || 'Virtual Care'}</div>
           <div className="vc-user">
             <div className="vc-avatar">{(user.display_name || '?').slice(0, 1).toUpperCase()}</div>
