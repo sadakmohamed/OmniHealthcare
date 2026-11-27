@@ -505,6 +505,10 @@ function LoginView({ onLogin, initialMessage }) {
                 <span>New patient?</span>
                 <button type="button" onClick={() => setShowRegister(true)}>Create account</button>
               </div>
+              <div className="auth-switch">
+                <span>Remote consultation?</span>
+                <button type="button" onClick={() => { window.location.href = '/virtual-care' }}>Virtual Care</button>
+              </div>
             </div>
           ) : (
             <div className="panel auth-panel">

@@ -118,22 +118,16 @@ function AuthScreen({ onSignedIn }) {
   }
 
   return (
-    <div className="vc-auth">
-      <aside className="vc-hero">
-        <div className="vc-hero-logo"><img src="/logo.png" alt="OmniHealthcare" /></div>
-        <h1>Virtual Care</h1>
-        <p className="vc-hero-lead">Consultations that reach patients wherever they are, on their own secure platform.</p>
-        <ul className="vc-hero-points">
-          <li><ShieldCheck size={18} /> Consent, audit trail and role-based access on every visit</li>
-          <li><Stethoscope size={18} /> Doctors manage their own queue and complete visit summaries</li>
-          <li><HeartPulse size={18} /> Patients book, join intake and read their summaries</li>
-          <li><UserCog size={18} /> Administrators create, update and inactivate every account</li>
-        </ul>
-        <small>Runs with its own database, independent of the hospital system.</small>
-      </aside>
-
-      <main className="vc-auth-card-wrap">
-        <form className="vc-auth-card" onSubmit={submit}>
+    <div className="login-page">
+      <div className="login-form-panel">
+        <div className="auth-card">
+          <div className="login-brand">
+            <div className="login-logo"><img src="/logo.png" alt="OmniHealthcare" /></div>
+            <h1>OmniHealthcare</h1>
+            <p>Virtual Care</p>
+          </div>
+          <div className="panel auth-panel">
+        <form onSubmit={submit}>
           <h2>{titles[mode][0]}</h2>
           <p className="vc-muted">{titles[mode][1]}</p>
 
@@ -190,7 +184,7 @@ function AuthScreen({ onSignedIn }) {
             {mode !== 'login' && <small className="form-hint">Use at least 12 characters.</small>}
           </div>
 
-          <button className="vc-submit" type="submit" disabled={loading || (!status && !error)}>
+          <button className="btn btn-primary login-submit" type="submit" disabled={loading || (!status && !error)}>
             <Lock size={16} />
             {loading ? 'Please wait…' : mode === 'login' ? 'Sign in' : mode === 'register' ? 'Create account' : 'Create organization'}
           </button>
@@ -199,7 +193,9 @@ function AuthScreen({ onSignedIn }) {
             <p className="vc-muted">Setup is disabled. Set VIRTUALCARE_BOOTSTRAP_KEY on the service first.</p>
           )}
         </form>
-      </main>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
