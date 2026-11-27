@@ -329,6 +329,56 @@ class VirtualCareWorkflowTests(APITestCase):
         self.verify_hospital.assert_not_called()
 
     @override_settings(VIRTUALCARE_BOOTSTRAP_KEY="synthetic-bootstrap-key")
+    def test_admin_manages_doctors_and_users_update_their_own_profile(self):
+        self.client.post("/api/v1/auth/bootstrap/", {
+            "bootstrap_key": "synthetic-bootstrap-key", "organization": "solo",
+            "username": "root", "display_name": "Root Admin",
+            "password": "SyntheticAdminPassword123",
+        }, format="json")
+        status_data = self.client.get("/api/v1/auth/status/").data
+        self.assertEqual((status_data["initialized"], status_data["organization"]), (True, "solo"))
+
+        login = self.client.post("/api/v1/auth/login/", {
+            "username": "root", "password": "SyntheticAdminPassword123",
+        }, format="json")
+        self.assertEqual(login.status_code, 200)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['access']}")
+        doctor = self.client.post("/api/v1/directory/", {
+            "role": "clinician", "username": "dr1", "display_name": "Dr One",
+            "specialty": "Cardiology", "phone": "+2526", "password": "SyntheticDoctorPass123",
+        }, format="json")
+        self.assertEqual(doctor.status_code, 201, doctor.data)
+        updated = self.client.patch(f"/api/v1/directory/{doctor.data['id']}/", {
+            "specialty": "Neurology", "username": "dr1b",
+        }, format="json")
+        self.assertEqual((updated.data["specialty"], updated.data["username"]), ("Neurology", "dr1b"))
+        listed = self.client.get("/api/v1/directory/").data["clinicians"]
+        self.assertEqual(listed[0]["specialty"], "Neurology")
+
+        self.client.credentials()
+        doctor_login = self.client.post("/api/v1/auth/login/", {
+            "username": "dr1b", "password": "SyntheticDoctorPass123",
+        }, format="json")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {doctor_login.data['access']}")
+        self.assertEqual(self.client.get("/api/v1/directory/").data.get("accounts"), None)
+        self.assertEqual(self.client.patch(
+            f"/api/v1/directory/{doctor.data['id']}/", {"is_active": False}, format="json"
+        ).status_code, 403)
+        wrong = self.client.patch("/api/v1/auth/me/", {
+            "current_password": "nope", "new_password": "AnotherSyntheticPass123",
+        }, format="json")
+        self.assertEqual(wrong.status_code, 400)
+        changed = self.client.patch("/api/v1/auth/me/", {
+            "display_name": "Dr Uno", "current_password": "SyntheticDoctorPass123",
+            "new_password": "AnotherSyntheticPass123",
+        }, format="json")
+        self.assertEqual(changed.data["display_name"], "Dr Uno")
+        self.client.credentials()
+        self.assertEqual(self.client.post("/api/v1/auth/login/", {
+            "username": "dr1b", "password": "AnotherSyntheticPass123",
+        }, format="json").status_code, 200)
+
+    @override_settings(VIRTUALCARE_BOOTSTRAP_KEY="synthetic-bootstrap-key")
     def test_admin_lists_and_deactivates_organization_accounts_only(self):
         for org in ("org-a", "org-b"):
             self.client.post("/api/v1/auth/bootstrap/", {

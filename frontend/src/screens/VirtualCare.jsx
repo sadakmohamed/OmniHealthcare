@@ -17,8 +17,6 @@ import {
   getPatients,
   getVirtualSessions,
   getVirtualCareDirectory,
-  createVirtualCareAccount,
-  updateVirtualCareAccount,
   grantVirtualCareConsent,
   linkVirtualAppointmentSession,
   markVirtualSessionHospitalSynced,
@@ -69,9 +67,6 @@ export default function VirtualCare({ me, standalone = false, onExit }) {
   const [sessions, setSessions] = useState([])
   const [patients, setPatients] = useState([])
   const [clinicians, setClinicians] = useState([])
-  const [accounts, setAccounts] = useState([])
-  const [accountRole, setAccountRole] = useState('')
-  const [accountSearch, setAccountSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -80,7 +75,6 @@ export default function VirtualCare({ me, standalone = false, onExit }) {
   const [statusFilter, setStatusFilter] = useState('')
   const [selectedId, setSelectedId] = useState('')
   const [showModal, setShowModal] = useState(false)
-  const [showAccountModal, setShowAccountModal] = useState(false)
   const [bookingKey, setBookingKey] = useState(() => newIdempotencyKey())
   const [submitting, setSubmitting] = useState(false)
   const [now, setNow] = useState(() => Date.now())
@@ -89,12 +83,6 @@ export default function VirtualCare({ me, standalone = false, onExit }) {
     clinician_id: '',
     scheduled_at: '',
     reason: ''
-  })
-  const [accountForm, setAccountForm] = useState({
-    role: 'clinician',
-    username: '',
-    display_name: '',
-    password: ''
   })
   const [intake, setIntake] = useState({
     reason: '',
@@ -157,7 +145,6 @@ export default function VirtualCare({ me, standalone = false, onExit }) {
       if (standalone) {
         setPatients(directory.data?.patients || [])
         setClinicians(directory.data?.clinicians || [])
-        setAccounts(directory.data?.accounts || [])
       } else {
         const [patientResult, clinicianResult] = directory
         setPatients(patientResult.data?.results || patientResult.data || [])
@@ -187,7 +174,6 @@ export default function VirtualCare({ me, standalone = false, onExit }) {
   const canSchedule = ['admin', 'receptionist', 'clinician', 'patient'].includes(role)
   const canManageQueue = role === 'clinician'
   const canSyncHospital = !standalone && ['admin', 'clinician'].includes(role)
-  const canCreateAccounts = standalone && role === 'admin'
   const waitingSessions = sessions.filter((session) => session.status === 'waiting')
 
   useEffect(() => {
@@ -236,59 +222,6 @@ export default function VirtualCare({ me, standalone = false, onExit }) {
       setSubmitting(false)
     }
   }
-
-  async function handleCreateAccount(event) {
-    event.preventDefault()
-    setSubmitting(true)
-    setError('')
-    try {
-      await createVirtualCareAccount(accountForm)
-      setSuccess(`${accountForm.role} account created.`)
-      setAccountForm({ role: 'clinician', username: '', display_name: '', password: '' })
-      setShowAccountModal(false)
-      await refreshData()
-    } catch (requestError) {
-      const data = requestError.response?.data
-      setError(data?.detail || data?.username?.[0] || data?.password?.[0] || 'Unable to create the account.')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  async function changeAccount(account, data, message) {
-    setError('')
-    setSuccess('')
-    try {
-      await updateVirtualCareAccount(account.id, data)
-      setSuccess(message)
-      await refreshData()
-    } catch (requestError) {
-      const body = requestError.response?.data
-      setError(body?.detail || body?.password?.[0] || body?.display_name?.[0] || 'Unable to update the account.')
-    }
-  }
-
-  function renameAccount(account) {
-    const name = window.prompt('New display name', account.display_name)
-    if (name && name.trim() && name.trim() !== account.display_name) {
-      changeAccount(account, { display_name: name.trim() }, 'Account renamed.')
-    }
-  }
-
-  function resetAccountPassword(account) {
-    const password = window.prompt(`New password for ${account.username} (at least 12 characters)`)
-    if (!password) return
-    if (password.length < 12) {
-      setError('Password must be at least 12 characters.')
-      return
-    }
-    changeAccount(account, { password }, 'Password reset. Share it securely with the account holder.')
-  }
-
-  const visibleAccounts = accounts.filter((account) => (
-    (!accountRole || account.role === accountRole) &&
-    `${account.username} ${account.display_name}`.toLowerCase().includes(accountSearch.trim().toLowerCase())
-  ))
 
   async function handleTransition(session, nextStatus) {
     setError('')
@@ -454,22 +387,16 @@ export default function VirtualCare({ me, standalone = false, onExit }) {
     <div className="virtual-care-screen">
       <div className="page-heading">
         <div>
-          <h1>Virtual Care</h1>
-          
+          <h1>{standalone ? 'Visits' : 'Virtual Care'}</h1>
           {standalone && <p className="form-hint">Independent mode · separate Virtual Care accounts and data.</p>}
         </div>
         <div className="page-actions">
-          {canCreateAccounts && (
-            <button className="btn btn-secondary" onClick={() => setShowAccountModal(true)}>
-              <Plus size={16} /> Add directory account
-            </button>
-          )}
           {canSchedule && (
             <button className="btn btn-primary" onClick={() => setShowModal(true)}>
               <Plus size={16} /> Schedule visit
             </button>
           )}
-          {standalone && (
+          {standalone && onExit && (
             <button className="btn btn-secondary" onClick={onExit}>Exit Virtual Care</button>
           )}
         </div>
@@ -533,50 +460,19 @@ export default function VirtualCare({ me, standalone = false, onExit }) {
         <button className="btn btn-secondary" onClick={refreshData}>Refresh</button>
       </div>
 
-      {canCreateAccounts && (
-        <div className="panel" style={{ marginBottom: 16 }}>
-          <div className="panel-header">
-            <h3>Registered accounts ({accounts.length})</h3>
-            <div className="page-actions">
-              <select className="filter-select" aria-label="Filter accounts by role" value={accountRole} onChange={(event) => setAccountRole(event.target.value)}>
-                <option value="">All roles</option>
-                {['admin', 'receptionist', 'clinician', 'patient'].map((value) => <option key={value} value={value}>{value}</option>)}
-              </select>
-              <input type="search" aria-label="Search accounts" placeholder="Search accounts" value={accountSearch} onChange={(event) => setAccountSearch(event.target.value)} />
-            </div>
+      <div className="stat-grid">
+        {[
+          ['Total visits', sessions.length, 'blue'],
+          ['Upcoming', sessions.filter((s) => ['booked', 'intake'].includes(s.status)).length, 'cyan'],
+          ['Waiting / live', sessions.filter((s) => ['waiting', 'consulting', 'interrupted'].includes(s.status)).length, 'amber'],
+          ['Completed', sessions.filter((s) => s.status === 'completed').length, 'green']
+        ].map(([label, value, tone]) => (
+          <div className="stat-card" key={label}>
+            <div className={`stat-icon ${tone}`}><Video size={22} /></div>
+            <div><div className="stat-label">{label}</div><div className="stat-value">{value}</div></div>
           </div>
-          {visibleAccounts.length ? (
-            <div className="table-wrap">
-              <table className="data-table">
-                <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th>Created</th><th /></tr></thead>
-                <tbody>
-                  {visibleAccounts.map((account) => (
-                    <tr key={account.id}>
-                      <td><strong>{account.display_name}</strong></td>
-                      <td>{account.username}</td>
-                      <td>{account.role}</td>
-                      <td>{account.is_active ? 'Active' : 'Inactive'}</td>
-                      <td>{new Date(account.created_at).toLocaleDateString()}</td>
-                      <td>
-                        <button className="btn btn-secondary btn-xs" onClick={() => renameAccount(account)}>Rename</button>{' '}
-                        <button className="btn btn-secondary btn-xs" onClick={() => resetAccountPassword(account)}>Reset password</button>{' '}
-                        {account.id !== me?.id && (
-                          <button
-                            className={`btn btn-xs ${account.is_active ? 'btn-danger' : 'btn-success'}`}
-                            onClick={() => changeAccount(account, { is_active: !account.is_active }, account.is_active ? 'Account inactivated.' : 'Account reactivated.')}
-                          >
-                            {account.is_active ? 'Inactivate' : 'Activate'}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : <div className="empty-state">No accounts match.</div>}
-        </div>
-      )}
+        ))}
+      </div>
 
       {['clinician', 'patient'].includes(role) && standalone && (
         <p className="form-hint">Showing only your own visits{role === 'clinician' ? ' — patients appear in the waiting queue after consent and intake.' : '.'}</p>
@@ -812,42 +708,6 @@ export default function VirtualCare({ me, standalone = false, onExit }) {
               <div className="form-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Close</button>
                 <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Scheduling…' : 'Schedule'}</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-      {showAccountModal && (
-        <div className="modal-overlay" onClick={() => setShowAccountModal(false)}>
-          <div className="modal" onClick={(event) => event.stopPropagation()}>
-            <div className="panel-header">
-              <h3>Add Virtual Care directory account</h3>
-              <button type="button" className="icon-button" onClick={() => setShowAccountModal(false)} aria-label="Close account form"><X size={18} /></button>
-            </div>
-            <form className="panel-body" onSubmit={handleCreateAccount}>
-              <div className="form-group">
-                <label htmlFor="vc-account-role">Role</label>
-                <select id="vc-account-role" value={accountForm.role} onChange={(event) => setAccountForm({ ...accountForm, role: event.target.value })}>
-                  <option value="clinician">Clinician</option>
-                  <option value="patient">Patient</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label htmlFor="vc-account-name">Full name</label>
-                <input id="vc-account-name" required value={accountForm.display_name} onChange={(event) => setAccountForm({ ...accountForm, display_name: event.target.value })} />
-              </div>
-              <div className="form-group">
-                <label htmlFor="vc-account-username">Username</label>
-                <input id="vc-account-username" required value={accountForm.username} onChange={(event) => setAccountForm({ ...accountForm, username: event.target.value })} />
-              </div>
-              <div className="form-group">
-                <label htmlFor="vc-account-password">Temporary password</label>
-                <input id="vc-account-password" type="password" minLength={12} required value={accountForm.password} onChange={(event) => setAccountForm({ ...accountForm, password: event.target.value })} />
-                <small className="form-hint">At least 12 characters. Share it securely with the account holder.</small>
-              </div>
-              <div className="form-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowAccountModal(false)}>Cancel</button>
-                <button className="btn btn-primary" disabled={submitting}>Create account</button>
               </div>
             </form>
           </div>

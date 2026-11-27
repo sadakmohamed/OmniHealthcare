@@ -18,6 +18,8 @@ class VirtualCareAccount(models.Model):
     role = models.CharField(max_length=20, choices=Role.choices)
     patient_id = models.CharField(max_length=64, blank=True)
     clinician_id = models.CharField(max_length=64, blank=True)
+    specialty = models.CharField(max_length=120, blank=True)
+    phone = models.CharField(max_length=30, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

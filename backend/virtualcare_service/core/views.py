@@ -30,9 +30,29 @@ def virtualcare_account_payload(account):
         "organization_id": account.organization,
         "patient_id": account.patient_id,
         "clinician_id": account.clinician_id,
+        "specialty": account.specialty,
+        "phone": account.phone,
+        "is_active": account.is_active,
+        "created_at": account.created_at,
         "first_name": account.display_name.split(" ", 1)[0],
         "last_name": account.display_name.split(" ", 1)[1] if " " in account.display_name else "",
     }
+
+
+def resolve_organization(value):
+    """Use the supplied organization, or the only initialized one when none is given."""
+    organization = str(value or "").strip()
+    if organization:
+        return organization
+    organizations = list(
+        VirtualCareAccount.objects.filter(role=VirtualCareAccount.Role.ADMIN, is_active=True)
+        .order_by()
+        .values_list("organization", flat=True)
+        .distinct()[:2]
+    )
+    if len(organizations) != 1:
+        raise ValidationError({"organization": "Enter your organization code."})
+    return organizations[0]
 
 
 def issue_virtualcare_token(account):
@@ -51,14 +71,16 @@ class VirtualCareLoginView(APIView):
     authentication_classes = []
 
     def post(self, request):
-        organization = str(request.data.get("organization", "")).strip()
+        organization = resolve_organization(request.data.get("organization"))
         username = str(request.data.get("username", "")).strip()
         password = request.data.get("password", "")
         account = VirtualCareAccount.objects.filter(
-            organization=organization, username=username, is_active=True
+            organization=organization, username=username
         ).first()
         if not account or not check_password(password, account.password):
             raise AuthenticationFailed("Virtual Care username or password is incorrect.")
+        if not account.is_active:
+            raise PermissionDenied("This account is inactive. Contact your administrator.")
         return Response({
             "access": issue_virtualcare_token(account),
             "user": virtualcare_account_payload(account),
@@ -70,12 +92,12 @@ class VirtualCareRegistrationView(APIView):
     authentication_classes = []
 
     def post(self, request):
-        organization = str(request.data.get("organization", "")).strip()
+        organization = resolve_organization(request.data.get("organization"))
         username = str(request.data.get("username", "")).strip()
         display_name = str(request.data.get("display_name", "")).strip()
         password = request.data.get("password", "")
-        if not organization or not username or not display_name:
-            raise ValidationError({"detail": "Organization, username, and name are required."})
+        if not username or not display_name:
+            raise ValidationError({"detail": "Username and name are required."})
         if len(password) < 12:
             raise ValidationError({"password": "Use a password with at least 12 characters."})
         if not VirtualCareAccount.objects.filter(
@@ -94,6 +116,7 @@ class VirtualCareRegistrationView(APIView):
                 display_name=display_name,
                 role=VirtualCareAccount.Role.PATIENT,
                 patient_id=str(account_id),
+                phone=str(request.data.get("phone", "")).strip()[:30],
             )
         except IntegrityError as exc:
             raise ValidationError({"username": "That username is already registered."}) from exc
@@ -101,6 +124,27 @@ class VirtualCareRegistrationView(APIView):
             "access": issue_virtualcare_token(account),
             "user": virtualcare_account_payload(account),
         }, status=status.HTTP_201_CREATED)
+
+
+class VirtualCareStatusView(APIView):
+    """Public: tells the sign-in page whether the service is set up and which organization to use."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        organizations = list(
+            VirtualCareAccount.objects.filter(role=VirtualCareAccount.Role.ADMIN, is_active=True)
+            .order_by()
+            .values_list("organization", flat=True)
+            .distinct()[:2]
+        )
+        return Response({
+            "initialized": bool(organizations),
+            "organization": organizations[0] if len(organizations) == 1 else "",
+            "needs_organization": len(organizations) > 1,
+            "setup_enabled": bool(getattr(settings, "VIRTUALCARE_BOOTSTRAP_KEY", "")),
+        })
 
 
 class VirtualCareBootstrapView(APIView):
@@ -163,8 +207,8 @@ class VirtualCareDirectoryView(APIView):
                     "id": account.clinician_id,
                     "clinician_id": account.clinician_id,
                     "name": account.display_name,
-                    "specialty": "Virtual Care",
-                    "department": "Virtual Care",
+                    "specialty": account.specialty or "Virtual Care",
+                    "department": account.specialty or "Virtual Care",
                 })
         if request.user.role == VirtualCareAccount.Role.PATIENT:
             patients = [item for item in patients if item["id"] == request.user.patient_id]
@@ -182,14 +226,7 @@ class VirtualCareDirectoryView(APIView):
         if request.user.role != VirtualCareAccount.Role.ADMIN:
             return {}
         return {"accounts": [
-            {
-                "id": str(account.pk),
-                "username": account.username,
-                "display_name": account.display_name,
-                "role": account.role,
-                "is_active": account.is_active,
-                "created_at": account.created_at,
-            }
+            virtualcare_account_payload(account)
             for account in VirtualCareAccount.objects.filter(
                 organization=request.user.organization_id
             ).order_by("role", "display_name")
@@ -199,8 +236,8 @@ class VirtualCareDirectoryView(APIView):
         if request.user.role != VirtualCareAccount.Role.ADMIN:
             raise PermissionDenied("Only Virtual Care administrators can add directory accounts.")
         role = request.data.get("role")
-        if role not in (VirtualCareAccount.Role.PATIENT, VirtualCareAccount.Role.CLINICIAN):
-            raise ValidationError({"role": "Create a patient or clinician account."})
+        if role not in VirtualCareAccount.Role.values:
+            raise ValidationError({"role": "Choose administrator, receptionist, clinician or patient."})
         username = str(request.data.get("username", "")).strip()
         display_name = str(request.data.get("display_name", "")).strip()
         password = request.data.get("password", "")
@@ -219,6 +256,8 @@ class VirtualCareDirectoryView(APIView):
                 role=role,
                 patient_id=str(account_id) if role == VirtualCareAccount.Role.PATIENT else "",
                 clinician_id=str(account_id) if role == VirtualCareAccount.Role.CLINICIAN else "",
+                specialty=str(request.data.get("specialty", "")).strip()[:120],
+                phone=str(request.data.get("phone", "")).strip()[:30],
             )
         except IntegrityError as exc:
             raise ValidationError({"username": "That username is already registered."}) from exc
@@ -239,12 +278,17 @@ class VirtualCareAccountDetailView(APIView):
         if not account:
             raise NotFound("Account not found.")
         changed = []
-        if "display_name" in request.data:
-            display_name = str(request.data["display_name"]).strip()
-            if not display_name:
-                raise ValidationError({"display_name": "Enter a name."})
-            account.display_name = display_name
-            changed.append("display_name")
+        for field in ("display_name", "username"):
+            if field in request.data:
+                value = str(request.data[field]).strip()
+                if not value:
+                    raise ValidationError({field: "This field cannot be blank."})
+                setattr(account, field, value)
+                changed.append(field)
+        for field, limit in (("specialty", 120), ("phone", 30)):
+            if field in request.data:
+                setattr(account, field, str(request.data[field]).strip()[:limit])
+                changed.append(field)
         if "is_active" in request.data:
             is_active = request.data["is_active"]
             if not isinstance(is_active, bool):
@@ -257,6 +301,48 @@ class VirtualCareAccountDetailView(APIView):
             if len(request.data["password"]) < 12:
                 raise ValidationError({"password": "Use a password with at least 12 characters."})
             account.password = make_password(request.data["password"])
+            changed.append("password")
+        if not changed:
+            raise ValidationError({"detail": "Nothing to update."})
+        try:
+            account.save(update_fields=changed)
+        except IntegrityError as exc:
+            raise ValidationError({"username": "That username is already registered."}) from exc
+        return Response(virtualcare_account_payload(account))
+
+
+class VirtualCareProfileView(APIView):
+    """Any Virtual Care user can view and update their own name, phone and password."""
+
+    permission_classes = [IsAuthenticated]
+
+    def _account(self, request):
+        account = VirtualCareAccount.objects.filter(pk=request.user.id).first()
+        if not account:
+            raise PermissionDenied("This profile is only available to Virtual Care accounts.")
+        return account
+
+    def get(self, request):
+        return Response(virtualcare_account_payload(self._account(request)))
+
+    def patch(self, request):
+        account = self._account(request)
+        changed = []
+        if "display_name" in request.data:
+            name = str(request.data["display_name"]).strip()
+            if not name:
+                raise ValidationError({"display_name": "Enter your name."})
+            account.display_name = name
+            changed.append("display_name")
+        if "phone" in request.data:
+            account.phone = str(request.data["phone"]).strip()[:30]
+            changed.append("phone")
+        if "new_password" in request.data:
+            if not check_password(request.data.get("current_password", ""), account.password):
+                raise ValidationError({"current_password": "The current password is incorrect."})
+            if len(request.data["new_password"]) < 12:
+                raise ValidationError({"new_password": "Use a password with at least 12 characters."})
+            account.password = make_password(request.data["new_password"])
             changed.append("password")
         if not changed:
             raise ValidationError({"detail": "Nothing to update."})

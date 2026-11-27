@@ -207,9 +207,12 @@ In Linux/macOS, use `python virtualcare_service/manage.py migrate` and
 For integrated hospital-token mode, both services must use the same `DJANGO_SECRET_KEY`; linked
 record synchronization uses the shared `VIRTUALCARE_SYNC_SECRET`. Standalone Virtual Care login
 uses only the Virtual Care service and its own database.
-In standalone mode the Virtual Care administrator sees a "Registered accounts" list for the
-organization and can rename, reset the password of, inactivate and reactivate accounts
-(`PATCH /api/v1/directory/<id>/`; self-inactivation is refused). Patients self-register, book with
+The standalone Virtual Care app (requirement scenario E) is served at `/virtual-care`
+(e.g. `http://127.0.0.1:5173/virtual-care`) and talks only to the Virtual Care service, so it
+keeps working while the hospital backend is stopped. It has separate administrator, doctor and
+patient sign-ins with their own dashboards. The administrator creates, edits, resets passwords
+of, inactivates and reactivates doctors, patients and staff (`/api/v1/directory/`; self-inactivation
+is refused); every user can edit their own profile and password (`/api/v1/auth/me/`). Patients self-register, book with
 any clinician the administrator has added, give consent, complete intake and join the queue; the
 clinician then sees the visit in the waiting queue, consults and completes it.Keep the Virtual Care terminal running while using Virtual Care; verify it at
 `http://127.0.0.1:8001/health/`. After pulling database changes, apply both migration commands

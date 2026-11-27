@@ -7,6 +7,10 @@ const virtualApi = axios.create({
   baseURL: import.meta.env.VITE_VIRTUAL_CARE_API_URL || '/virtual-api/api/v1',
 })
 
+export const VC_TOKEN_KEY = 'vc_standalone_token'
+export const VC_USER_KEY = 'vc_standalone_user'
+export const isStandaloneVirtualCare = () => window.location.pathname.startsWith('/virtual-care')
+
 const listEndpointsByScreen = {
   dashboard: ['appointments', 'inpatient-admissions'],
   opd: [
@@ -68,10 +72,17 @@ const attachToken = (config) => {
   return config
 }
 api.interceptors.request.use(attachToken)
-virtualApi.interceptors.request.use(attachToken)
+virtualApi.interceptors.request.use((config) => {
+  if (isStandaloneVirtualCare()) {
+    const token = localStorage.getItem(VC_TOKEN_KEY)
+    if (token) config.headers.Authorization = `Bearer ${token}`
+    return config
+  }
+  return attachToken(config)
+})
 
-// Standalone Virtual Care sign-in was removed; discard any token it left in the browser so it
-// can never override the signed-in hospital user's identity.
+// The standalone Virtual Care app lives at /virtual-care with its own token, so it never shares
+// an identity with the hospital app. Discard tokens from the earlier embedded sign-in.
 localStorage.removeItem('oh_virtualcare_token')
 localStorage.removeItem('oh_virtualcare_user')
 
@@ -90,8 +101,14 @@ virtualApi.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('oh_token')
-      localStorage.removeItem('oh_user')
+      if (isStandaloneVirtualCare()) {
+        localStorage.removeItem(VC_TOKEN_KEY)
+        localStorage.removeItem(VC_USER_KEY)
+        window.dispatchEvent(new Event('vc-signed-out'))
+      } else {
+        localStorage.removeItem('oh_token')
+        localStorage.removeItem('oh_user')
+      }
     }
     return Promise.reject(error)
   }
@@ -269,6 +286,9 @@ export const virtualCareRegister = (data) => virtualApi.post('/auth/register/', 
 export const getVirtualCareDirectory = () => virtualApi.get('/directory/')
 export const createVirtualCareAccount = (data) => virtualApi.post('/directory/', data)
 export const updateVirtualCareAccount = (id, data) => virtualApi.patch(`/directory/${id}/`, data)
+export const getVirtualCareStatus = () => virtualApi.get('/auth/status/')
+export const bootstrapVirtualCare = (data) => virtualApi.post('/auth/bootstrap/', data)
+export const updateVirtualCareProfile = (data) => virtualApi.patch('/auth/me/', data)
 export const createVirtualSession = (data, idempotencyKey) =>
   virtualApi.post('/sessions/', data, {
     headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined
