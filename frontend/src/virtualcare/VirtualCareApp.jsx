@@ -226,38 +226,67 @@ function Shell({ user, onSignOut, onProfileUpdated }) {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
-    <div className="vc-shell">
-      {menuOpen && <div className="vc-backdrop" onClick={() => setMenuOpen(false)} />}
-      <aside className={`vc-sidebar${menuOpen ? ' open' : ''}`}>
-        <div className="vc-sidebar-brand">
-          <img src="/logo.png" alt="OmniHealth" />
-          <span>Virtual Care</span>
-          <button className="vc-sidebar-close" aria-label="Close menu" onClick={() => setMenuOpen(false)}><X size={18} /></button>
+    <div className="app-shell">
+      <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
+        <div className="brand">
+          <img src="/logo.png" alt="OmniHealth" onError={(e) => { e.target.style.display = 'none' }} />
+          <div className="brand-text">
+            <strong>OmniHealth</strong>
+            <span>Virtual Care</span>
+          </div>
         </div>
+
         <nav>
           {navFor(user.role).map((item) => (
-            <button key={item.id} className={page === item.id ? 'active' : ''} onClick={() => { setPage(item.id); setMenuOpen(false) }}>
-              <item.icon size={18} /> {item.label}
+            <button
+              key={item.id}
+              className={`nav-item ${page === item.id ? 'active' : ''}`}
+              onClick={() => { setPage(item.id); setMenuOpen(false) }}
+            >
+              <item.icon size={18} />
+              <span>{item.label}</span>
             </button>
           ))}
         </nav>
-        <button className="vc-signout" onClick={onSignOut}><LogOut size={18} /> Sign out</button>
-      </aside>
 
-      <div className="vc-main">
-        <header className="vc-topbar">
-          <button className="vc-menu-btn" aria-label="Open menu" onClick={() => setMenuOpen(true)}><Menu size={22} /></button>
-          <div className="vc-org-chip"><ShieldCheck size={14} /> {user.organization_id || 'Virtual Care'}</div>
-          <div className="vc-user">
-            <div className="vc-avatar">{(user.display_name || '?').slice(0, 1).toUpperCase()}</div>
-            <div>
-              <strong>{user.display_name}</strong>
-              <span className={`vc-role vc-role-${user.role}`}>{ROLE_LABELS[user.role] || user.role}</span>
+        <div className="sidebar-footer">
+          <div className="user-chip">
+            <div className="avatar">{(user.display_name || '?').slice(0, 1).toUpperCase()}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <strong style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.display_name}</strong>
+              <small>{ROLE_LABELS[user.role] || user.role}</small>
             </div>
+          </div>
+          <button className="nav-item logout" onClick={onSignOut}>
+            <LogOut size={16} />
+            <span>Sign Out</span>
+          </button>
+        </div>
+      </aside>
+      {menuOpen && (
+        <button type="button" className="sidebar-backdrop" onClick={() => setMenuOpen(false)} aria-label="Close navigation menu" />
+      )}
+
+      <main>
+        <header className={`topbar${menuOpen ? ' menu-open' : ''}`}>
+          <button
+            className="menu-btn"
+            onClick={() => setMenuOpen(!menuOpen)}
+            aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={menuOpen}
+          >
+            {menuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+          <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--navy)' }}>
+            OmniHealth Virtual Care
+          </div>
+          <div className="topbar-right">
+            <div className="vc-org-chip"><ShieldCheck size={14} /> {user.organization_id || 'Virtual Care'}</div>
+            <div className="topbar-avatar">{(user.display_name || '?').slice(0, 1).toUpperCase()}</div>
           </div>
         </header>
 
-        <div className="vc-content">
+        <div className="content">
           {page === 'overview' && <Overview user={user} onNavigate={setPage} />}
           {page === 'visits' && <VirtualCare me={user} standalone />}
           {page === 'doctors' && <AccountsPage key="doctors" me={user} kind="doctors" />}
@@ -265,7 +294,7 @@ function Shell({ user, onSignOut, onProfileUpdated }) {
           {page === 'staff' && <AccountsPage key="staff" me={user} kind="staff" />}
           {page === 'profile' && <Profile user={user} onUpdated={onProfileUpdated} />}
         </div>
-      </div>
+                </main>
     </div>
   )
 }
