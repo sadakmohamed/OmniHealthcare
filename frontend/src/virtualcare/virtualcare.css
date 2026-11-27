@@ -115,14 +115,15 @@
   .vc-content { padding: 20px; }
 }
 @media (max-width: 860px) {
-  .vc-shell { grid-template-columns: minmax(0, 1fr); }
-  .vc-sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: min(280px, 82vw); height: 100vh; height: 100dvh; z-index: 60; overflow-y: auto; transform: translateX(-100%); transition: transform .25s ease; box-shadow: none; }
-  .vc-sidebar.open { transform: translateX(0); box-shadow: 8px 0 30px rgba(2, 12, 27, .35); }
-  .vc-backdrop { display: block; position: fixed; inset: 0; background: rgba(2, 12, 27, .55); z-index: 50; }
-  .vc-menu-btn { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin-right: 10px; border: 1px solid #e2e8f0; background: #fff; border-radius: 10px; color: #0b2239; cursor: pointer; flex-shrink: 0; }
-  .vc-sidebar .vc-sidebar-close { display: inline-flex; margin-left: auto; padding: 6px; }
+  .vc-shell { grid-template-columns: 72px minmax(0, 1fr); }
+  .vc-sidebar { position: sticky; top: 0; height: 100vh; height: 100dvh; padding: 10px 6px; overflow-y: auto; scrollbar-width: none; }
+  .vc-sidebar::-webkit-scrollbar { display: none; }
+  .vc-sidebar-brand { justify-content: center; padding: 8px 4px; margin-bottom: 10px; }
+  .vc-sidebar-brand img { height: 26px; max-width: 100%; object-fit: contain; }
+  .vc-sidebar-brand span { display: none; }
+  .vc-sidebar button { flex-direction: column; justify-content: center; gap: 4px; padding: 9px 2px; font-size: 10px; line-height: 1.15; text-align: center; word-break: break-word; }
   .vc-org-chip { margin-right: auto; }
-  .vc-topbar { padding: 10px 14px; position: sticky; top: 0; z-index: 30; }
+  .vc-topbar { padding: 10px 14px; }
   .vc-hero-banner { flex-direction: column; align-items: flex-start; }
   .vc-content .data-table { min-width: 520px; }
 }
