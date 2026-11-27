@@ -194,6 +194,21 @@ class VirtualCareWorkflowTests(APITestCase):
         self.assertEqual(completed.data["prescriptions"][0]["medication"], "Paracetamol")
         self.assertGreaterEqual(len(completed.data["audit_events"]), 8)
 
+    def test_reception_can_record_consent_but_clinician_cannot(self):
+        created = self.create_visit()
+        visit_id = created.data["id"]
+        self.authenticate("clinician", "doctor-1", clinician_id="clinician-1")
+        denied = self.client.post(
+            f"/api/v1/sessions/{visit_id}/consent/", {"granted": True}, format="json"
+        )
+        self.assertEqual(denied.status_code, 403)
+        self.authenticate("receptionist", "reception-1")
+        recorded = self.client.post(
+            f"/api/v1/sessions/{visit_id}/consent/", {"granted": True}, format="json"
+        )
+        self.assertEqual(recorded.status_code, 200)
+        self.assertTrue(recorded.data["consent_active"])
+
     def test_only_assigned_clinician_can_start_consultation(self):
         created = self.create_visit()
         visit_id = created.data["id"]

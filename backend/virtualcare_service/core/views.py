@@ -499,8 +499,9 @@ class VirtualVisitViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def consent(self, request, pk=None):
         visit = self.get_object()
-        if request.user.role != "patient" or str(visit.patient_id) != request.user.patient_id:
-            raise PermissionDenied("Only the patient can grant or revoke virtual-care consent.")
+        is_patient = request.user.role == "patient" and str(visit.patient_id) == request.user.patient_id
+        if not is_patient and request.user.role not in {"admin", "receptionist"}:
+            raise PermissionDenied("Only the patient or reception can record virtual-care consent.")
         granted = request.data.get("granted")
         if not isinstance(granted, bool):
             raise ValidationError({"granted": "Choose whether to grant or revoke consent."})
@@ -518,7 +519,10 @@ class VirtualVisitViewSet(viewsets.ModelViewSet):
                 "updated_at",
             ]
         )
-        self._audit(visit, request.user, "consent.granted" if granted else "consent.revoked")
+        action_name = "consent.granted" if granted else "consent.revoked"
+        if not is_patient:
+            action_name = "consent.recorded_by_staff" if granted else "consent.revoked_by_staff"
+        self._audit(visit, request.user, action_name)
         return Response(self.get_serializer(visit).data)
 
     @action(detail=True, methods=["post"])

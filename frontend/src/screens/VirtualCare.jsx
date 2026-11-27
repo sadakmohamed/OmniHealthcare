@@ -82,7 +82,8 @@ export default function VirtualCare({ me, standalone = false, onExit }) {
     patient_id: '',
     clinician_id: '',
     scheduled_at: '',
-    reason: ''
+    reason: '',
+    consent: false
   })
   const [intake, setIntake] = useState({
     reason: '',
@@ -183,9 +184,11 @@ export default function VirtualCare({ me, standalone = false, onExit }) {
   }, [selected])
 
   function updateSession(session) {
-    setSessions((current) => current.map((item) => (
-      String(item.id) === String(session.id) ? session : item
-    )))
+    setSessions((current) => (
+      current.some((item) => String(item.id) === String(session.id))
+        ? current.map((item) => (String(item.id) === String(session.id) ? session : item))
+        : [session, ...current]
+    ))
     setSelectedId(String(session.id))
   }
 
@@ -211,10 +214,26 @@ export default function VirtualCare({ me, standalone = false, onExit }) {
         scheduled_at: scheduledAt.toISOString(),
         reason: form.reason.trim()
       }, bookingKey)
-      updateSession(response.data)
-      setSuccess('Virtual visit scheduled. The patient must grant consent before starting intake.')
+      let visit = response.data
+      let consentFailed = false
+      if (form.consent && !visit.consent_active) {
+        try {
+          visit = (await grantVirtualCareConsent(visit.id, true)).data
+        } catch {
+          consentFailed = true
+        }
+      }
+      updateSession(visit)
+      selectSession(visit)
+      setSuccess(
+        visit.consent_active
+          ? 'Virtual visit scheduled and consent recorded. Next: begin intake.'
+          : consentFailed
+            ? 'Virtual visit scheduled, but consent could not be recorded. Please record it from the visit.'
+            : 'Virtual visit scheduled. Record the patient consent to continue.'
+      )
       setShowModal(false)
-      setForm({ patient_id: '', clinician_id: '', scheduled_at: '', reason: '' })
+      setForm({ patient_id: '', clinician_id: '', scheduled_at: '', reason: '', consent: false })
       setBookingKey(newIdempotencyKey())
     } catch (requestError) {
       setError(messageFromError(requestError))
@@ -320,14 +339,14 @@ export default function VirtualCare({ me, standalone = false, onExit }) {
 
   function renderActions(session) {
     const actions = []
-    if (role === 'patient' && session.status !== 'completed' && session.status !== 'cancelled') {
+    if (['patient', 'admin', 'receptionist'].includes(role) && session.status !== 'completed' && session.status !== 'cancelled') {
       actions.push(
         <button
           key="consent"
           className={`btn btn-xs ${session.consent_active ? 'btn-secondary' : 'btn-primary'}`}
           onClick={() => handleConsent(session, !session.consent_active)}
         >
-          <ShieldCheck size={14} /> {session.consent_active ? 'Revoke consent' : 'Grant consent'}
+          <ShieldCheck size={14} /> {session.consent_active ? 'Revoke consent' : role === 'patient' ? 'Grant consent' : 'Record consent'}
         </button>
       )
     }
@@ -553,10 +572,24 @@ export default function VirtualCare({ me, standalone = false, onExit }) {
             <button className="btn btn-secondary btn-xs" onClick={() => selectSession(null)} aria-label="Close session details"><X size={15} /></button>
           </div>
           <div className="panel-body">
+            <div className="vc-actions" style={{ marginBottom: 14 }}>{renderActions(selected)}</div>
             {!selected.consent_active && !['completed', 'cancelled'].includes(selected.status) && (
-              <div className="alert alert-warning">
-                <ShieldCheck size={16} /> Active patient consent is required before this visit can progress.
-              </div>
+              role === 'clinician' ? (
+                <div className="alert alert-info">
+                  <ShieldCheck size={16} />
+                  <div>Waiting for the patient or reception to confirm consent and complete check-in. This visit joins your queue as soon as the patient is ready.</div>
+                </div>
+              ) : (
+                <div className="alert alert-warning">
+                  <ShieldCheck size={16} />
+                  <div style={{ flex: 1 }}>
+                    {role === 'patient' ? 'Please grant consent to continue with this visit.' : 'Patient consent has not been recorded yet.'}
+                  </div>
+                  <button className="btn btn-primary btn-xs" onClick={() => handleConsent(selected, true)}>
+                    {role === 'patient' ? 'Grant consent' : 'Record consent'}
+                  </button>
+                </div>
+              )
             )}
 
             {selected.status === 'intake' && (
@@ -705,8 +738,11 @@ export default function VirtualCare({ me, standalone = false, onExit }) {
                 <label>Reason (optional)</label>
                 <textarea value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} />
               </div>
+              <label className="checkbox-row">
+                <input type="checkbox" required={role === 'patient'} checked={form.consent} onChange={(event) => setForm({ ...form, consent: event.target.checked })} />
+                {role === 'patient' ? 'I consent to this virtual consultation *' : 'Patient has consented to this virtual consultation'}
+              </label>
               <div className="form-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Close</button>
                 <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Scheduling…' : 'Schedule'}</button>
               </div>
             </form>
