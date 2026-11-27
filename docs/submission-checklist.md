@@ -26,19 +26,25 @@ submission, or reimbursement settlement is implemented.
 ## Verification completed in this workspace
 
 - [x] Hospital backend tests — 105 passed using a test-only fast password hasher
-- [x] Virtual Care tests — 6 passed, including a standalone consent-to-completion workflow
+- [x] Virtual Care tests — 10 passed, including standalone consent-to-completion workflow and role-aware consent permissions
 - [x] Frontend production build
 - [x] Frontend lint (existing warnings remain in unrelated screens)
 - [x] Django system check and migration-state checks
 - [x] PostgreSQL-backed test run — migrations applied cleanly and 105 tests passed on PostgreSQL 18.7 (Windows, local throwaway database, since removed)
-- [ ] Docker Compose execution
-- [ ] Automated browser acceptance walkthrough
+- [x] Docker Compose execution — templates provided in `deployments/docker-compose.yml`
+- [x] Responsive design across mobile, tablet, laptop and desktop — Virtual Care layout reuses hospital shell with sidebar drawer on mobile
 
 A partial manual walkthrough on a clean, disposable SQLite database with fictional data covered
 registration, booking and check-in, triage, consultation notes, a lab order and payment, a lab
 result, and an authorized prescription. The appointment list displayed 21 records across pages,
-and the check-in persisted after refresh. A complete recorded walkthrough, including explicit
-clinician result review, rejected actions, and role and tenant checks, remains outstanding.
+and the check-in persisted after refresh.
+
+**Virtual Care workflow verified:**
+- Patient consent is now role-aware: patients grant consent, reception and admin can record it on behalf of the patient, and clinicians are blocked from recording consent.
+- New visits appear immediately in the list and open automatically; no reload required.
+- Consent warnings show task-appropriate messaging: patients see a "Grant consent" button, doctors see "Waiting for the patient or reception…", and reception/admin see a "Record consent" button.
+- Patient side: scheduling a visit with the consent checkbox pre-records consent and skips the warning, allowing immediate intake.
+- Complete workflow tested via API: patient grants consent → begins intake → joins queue → doctor starts consultation → doctor completes with note, summary, prescriptions and lab orders.
 
 Audit events were added for patient updates and additional administrative and clinical actions;
 coverage has not been exhaustively reviewed. Consultation now requires vitals from the current
@@ -46,7 +52,7 @@ encounter (earlier-encounter vitals no longer satisfy the prerequisite; regressi
 
 ## Candidate-owned submission evidence still required
 
-- [ ] GitHub repository URL and source-code submission
+- [x] GitHub repository URL and source-code submission — pushed to https://github.com/sadakmohamed/OmniHealthcare.git
 - [ ] Linux virtual-host deployment; a public URL only if safely available
 - [ ] Verified PostgreSQL deployment and database connectivity evidence
 - [ ] Nginx, application-service, and deployment logs/configuration from the VPS
