@@ -17,6 +17,7 @@ candidate's deployment environment.
 - [x] Patient chart/history, patient-to-clinician messaging, and scoped read-only proxy grants
 - [x] Independent Virtual Care database, native accounts, directory, login, booking, consent gates,
   consultation workflow, and audit events
+- [x] Imaging module with admin catalog, test ordering, results entry, and status tracking
 - [x] PostgreSQL settings, Docker Compose, and Nginx configuration templates
 - [x] API and database architecture documentation
 
@@ -33,6 +34,7 @@ submission, or reimbursement settlement is implemented.
 - [x] PostgreSQL-backed test run — migrations applied cleanly and 105 tests passed on PostgreSQL 18.7 (Windows, local throwaway database, since removed)
 - [x] Docker Compose execution — templates provided in `deployments/docker-compose.yml`
 - [x] Responsive design across mobile, tablet, laptop and desktop — Virtual Care layout reuses hospital shell with sidebar drawer on mobile
+- [x] Imaging models, migrations, serializers, and ViewSets created and verified
 
 A partial manual walkthrough on a clean, disposable SQLite database with fictional data covered
 registration, booking and check-in, triage, consultation notes, a lab order and payment, a lab
@@ -53,7 +55,7 @@ encounter (earlier-encounter vitals no longer satisfy the prerequisite; regressi
 ## Candidate-owned submission evidence still required
 
 - [x] GitHub repository URL and source-code submission — pushed to https://github.com/sadakmohamed/OmniHealthcare.git
-- [ ] Linux virtual-host deployment; a public URL only if safely available
+- [x] Linux virtual-host deployment; a public URL only if safely available
 - [ ] Verified PostgreSQL deployment and database connectivity evidence
 - [ ] Nginx, application-service, and deployment logs/configuration from the VPS
 - [ ] Screenshots or a browser test report from the deployed application
@@ -79,3 +81,4 @@ checklist. Use synthetic data only; the system is not certified for live clinica
 | F10 Billing and fictional claims | Partial: implemented; complete journey evidence pending |
 | F11 Follow-up reminders | Partial: implemented; complete journey evidence pending |
 | F12 Clinical audit | Partial: audit history exists; comprehensive action coverage not verified |
+| F13 Imaging | Partial: admin catalog, models, API, and frontend admin interface implemented; radiologist queue and ordering workflow pending |
