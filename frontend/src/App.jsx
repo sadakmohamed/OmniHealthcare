@@ -82,6 +82,7 @@ export default function App() {
     }
   })
   const [currentScreen, setCurrentScreen] = useState('dashboard')
+  const [adminTab, setAdminTab] = useState('consultants')
   const [listFilters, setListFilters] = useState(() => ({
     search: localStorage.getItem('oh_list_search_dashboard') || '',
     date: localStorage.getItem('oh_list_date_dashboard') || ''
@@ -149,35 +150,39 @@ export default function App() {
 
   const role = me?.role || 'pending'
 
-  // Navigation Items with Role-Based Permissions
-  const navItems = [
+  // Navigation Items - Simplified with Role-Based Permissions
+  const mainNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['*'] },
     { id: 'opd', label: 'OPD Queue', icon: Stethoscope, roles: ['admin', 'receptionist', 'clinician', 'nurse'] },
-    { id: 'consultants', label: 'Consultants Directory', icon: User, roles: ['admin'] },
-    { id: 'users', label: 'User Accounts', icon: Users, roles: ['admin'] },
-    { id: 'profile', label: 'My Profile', icon: User, roles: ['*'] },
-    { id: 'patients', label: 'Patient Charts', icon: Users, roles: ['admin', 'clinician', 'nurse'] },
     { id: 'appointments', label: 'Appointments', icon: CalendarDays, roles: ['admin', 'receptionist', 'clinician', 'patient'] },
+    { id: 'patients', label: 'Patient Charts', icon: Users, roles: ['admin', 'clinician', 'nurse'] },
     { id: 'triage', label: 'Triage & Vitals', icon: Activity, roles: ['admin', 'nurse'] },
     { id: 'encounters', label: 'Consultations', icon: Stethoscope, roles: ['admin', 'clinician'] },
-    { id: 'messages', label: 'Patient Messages', icon: Bell, roles: ['clinician'] },
+    { id: 'messages', label: 'Messages', icon: Bell, roles: ['clinician'] },
     { id: 'laboratory', label: 'Laboratory', icon: HeartPulse, roles: ['admin', 'clinician', 'lab'] },
-    { id: 'lab-tests', label: 'Lab Test Catalog', icon: HeartPulse, roles: ['admin', 'billing'] },
     { id: 'pharmacy', label: 'Pharmacy', icon: Pill, roles: ['admin', 'pharmacist'] },
-    { id: 'medications', label: 'Medication Catalog', icon: Pill, roles: ['admin', 'pharmacist'] },
     { id: 'referrals', label: 'Referrals', icon: Share2, roles: ['admin', 'clinician'] },
     { id: 'inpatients', label: 'Inpatients', icon: BedDouble, roles: ['admin', 'clinician', 'nurse'] },
-    { id: 'wards', label: 'Ward & Beds', icon: BedDouble, roles: ['admin', 'nurse'] },
-    { id: 'billing', label: 'Billing & Claims', icon: DollarSign, roles: ['admin', 'billing'] },
+    { id: 'billing', label: 'Billing', icon: DollarSign, roles: ['admin', 'billing'] },
     { id: 'follow-ups', label: 'Follow-ups', icon: Bell, roles: ['admin', 'receptionist', 'clinician', 'nurse'] },
     { id: 'virtual', label: 'Virtual Care', icon: Video, roles: ['admin', 'clinician', 'receptionist', 'patient'] },
-    { id: 'patient-portal', label: 'My Health Portal', icon: FileText, roles: ['patient', 'admin'] },
-    { id: 'audit', label: 'Audit History', icon: ShieldCheck, roles: ['admin'] }
+    { id: 'patient-portal', label: 'Health Portal', icon: FileText, roles: ['patient', 'admin'] }
   ]
 
-  const visibleNav = navItems.filter(
+  // Admin-only tabs (shown when admin clicks "Administrator")
+  const adminTabs = [
+    { id: 'consultants', label: 'Consultants', icon: User },
+    { id: 'users', label: 'User Accounts', icon: Users },
+    { id: 'profile', label: 'My Profile', icon: User },
+    { id: 'lab-tests', label: 'Lab Tests', icon: HeartPulse },
+    { id: 'medications', label: 'Medications', icon: Pill },
+    { id: 'audit', label: 'Audit History', icon: ShieldCheck }
+  ]
+
+  const visibleNav = mainNavItems.filter(
     (item) => item.roles.includes('*') || item.roles.includes(role)
   )
+  const isAdminView = currentScreen === 'admin'
   const filters = GLOBAL_LIST_FILTER_SCREENS[currentScreen] && (
     <ListFilters
       screen={currentScreen}
@@ -216,6 +221,20 @@ export default function App() {
               </button>
             )
           })}
+          
+          {role === 'admin' && (
+            <button
+              className={`nav-item admin-btn ${isAdminView ? 'active' : ''}`}
+              onClick={() => {
+                setCurrentScreen('admin')
+                setMobileMenuOpen(false)
+              }}
+              style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,.1)' }}
+            >
+              <ShieldCheck size={18} />
+              <span>Administrator</span>
+            </button>
+          )}
         </nav>
 
         <div className="sidebar-footer">
@@ -262,6 +281,46 @@ export default function App() {
         </header>
 
         <div className="content" key={`${currentScreen}-${listFilters.search}-${listFilters.date}`}>
+          {currentScreen === 'admin' && (
+            <div className="admin-panel">
+              <div className="admin-header">
+                <h1>Administrator</h1>
+                <p>Manage system settings, users, and configurations</p>
+              </div>
+              
+              <div className="admin-tabs">
+                {adminTabs.map((tab) => {
+                  const TabIcon = tab.icon
+                  const isActive = adminTab === tab.id
+                  return (
+                    <button
+                      key={tab.id}
+                      className={`admin-tab ${isActive ? 'active' : ''}`}
+                      onClick={() => setAdminTab(tab.id)}
+                    >
+                      <TabIcon size={16} />
+                      <span>{tab.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+              
+              <div className="admin-content">
+                {adminTab === 'consultants' && <Consultants me={me} listFilters={filters} />}
+                {adminTab === 'users' && <ManageUsers me={me} />}
+                {adminTab === 'profile' && me && <Profile me={me} onUpdate={(user) => {
+                  setMe(user)
+                  localStorage.setItem('oh_user', JSON.stringify(user))
+                }} onPasswordChanged={() => {
+                  setLoginMessage('Password changed. Sign in with your new password.')
+                  handleLogout()
+                }} />}
+                {adminTab === 'lab-tests' && <LabTests />}
+                {adminTab === 'medications' && <Medications />}
+                {adminTab === 'audit' && <AuditHistory me={me} listFilters={filters} />}
+              </div>
+            </div>
+          )}
           {currentScreen === 'dashboard' && <Dashboard me={me} onNavigate={navigateTo} listFilters={filters} filterValues={listFilters} />}
           {currentScreen === 'opd' && (
             selectedConsultationPatient ? (
@@ -284,24 +343,13 @@ export default function App() {
               />
             )
           )}
-          {currentScreen === 'consultants' && <Consultants me={me} listFilters={filters} />}
-          {currentScreen === 'users' && <ManageUsers me={me} />}
-          {currentScreen === 'profile' && me && <Profile me={me} onUpdate={(user) => {
-            setMe(user)
-            localStorage.setItem('oh_user', JSON.stringify(user))
-          }} onPasswordChanged={() => {
-            setLoginMessage('Password changed. Sign in with your new password.')
-            handleLogout()
-          }} />}
           {currentScreen === 'patients' && <Patients me={me} onNavigate={navigateTo} listFilters={filters} />}
           {currentScreen === 'appointments' && <Appointments me={me} onNavigate={navigateTo} />}
           {currentScreen === 'triage' && <Triage me={me} onNavigate={navigateTo} listFilters={filters} />}
           {currentScreen === 'encounters' && <Encounters me={me} onNavigate={navigateTo} listFilters={filters} />}
           {currentScreen === 'messages' && <ClinicianMessages me={me} />}
           {currentScreen === 'laboratory' && <Laboratory me={me} />}
-          {currentScreen === 'lab-tests' && <LabTests />}
           {currentScreen === 'pharmacy' && <Pharmacy me={me} />}
-          {currentScreen === 'medications' && <Medications />}
           {currentScreen === 'referrals' && <Referrals me={me} listFilters={filters} />}
           {currentScreen === 'inpatients' && (
             <Inpatients me={me} onNavigate={navigateTo} listFilters={filters} />
@@ -311,7 +359,6 @@ export default function App() {
           {currentScreen === 'follow-ups' && <FollowUps me={me} listFilters={filters} />}
           {currentScreen === 'virtual' && <VirtualCare me={me} />}
           {currentScreen === 'patient-portal' && <PatientPortal me={me} listFilters={filters} />}
-          {currentScreen === 'audit' && <AuditHistory me={me} listFilters={filters} />}
         </div>
       </main>
     </div>
