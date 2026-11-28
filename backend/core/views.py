@@ -2082,10 +2082,11 @@ class ImagingTestViewSet(TenantViewSet):
 class ImagingOrderViewSet(TenantViewSet):
     queryset = ImagingOrder.objects.all().order_by("-created_at")
     serializer_class = ImagingOrderSerializer
-    http_method_names = ["get", "post", "head", "options"]
+    http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_queryset(self):
         qs = super().get_queryset()
+        status = self.request.query_params.get("status")
         patient_id = self.request.query_params.get("patient")
         encounter_id = self.request.query_params.get("encounter")
         admission_id = self.request.query_params.get("admission")
@@ -2095,6 +2096,8 @@ class ImagingOrderViewSet(TenantViewSet):
             qs = qs.filter(encounter_id=encounter_id)
         if admission_id:
             qs = qs.filter(admission_id=admission_id)
+        if status:
+            qs = qs.filter(status=status)
         if self.request.user.role == "radiologist":
             qs = qs.filter(status=ImagingOrder.Status.ORDERED).filter(
                 Q(bill__isnull=True) | Q(bill__status="paid")
@@ -2153,6 +2156,22 @@ class ImagingOrderViewSet(TenantViewSet):
                 bill=bill,
             )
             self._audit_change(order, "imaging.ordered", {"bill_id": str(bill.pk)})
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        if self.request.user.role not in ("radiologist", "admin"):
+            raise PermissionDenied("Only radiologists and admins may update imaging orders.")
+        order = self.get_object()
+        if order.organization_id != self.request.user.organization_id:
+            raise PermissionDenied("Cannot update imaging orders from other organizations.")
+        new_status = serializer.validated_data.get("status")
+        if new_status and new_status != order.status:
+            # Audit the status change
+            self._audit_change(order, "imaging.status_changed", {
+                "old_status": order.status,
+                "new_status": new_status
+            })
+        serializer.save()
 
 
 class ImagingResultViewSet(TenantViewSet):

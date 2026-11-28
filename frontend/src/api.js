@@ -141,6 +141,7 @@ export const updateImagingTest = (id, data) => api.patch(`/imaging-tests/${id}/`
 export const deleteImagingTest = (id) => api.delete(`/imaging-tests/${id}/`)
 export const getImagingOrders = (params) => api.get('/imaging-orders/', { params })
 export const createImagingOrder = (data) => api.post('/imaging-orders/', data)
+export const updateImagingOrder = (id, data) => api.patch(`/imaging-orders/${id}/`, data)
 export const getImagingResults = (params) => api.get('/imaging-results/', { params })
 export const createImagingResult = (data) => api.post('/imaging-results/', data)
 export const updateImagingResult = (id, data) => api.patch(`/imaging-results/${id}/`, data)

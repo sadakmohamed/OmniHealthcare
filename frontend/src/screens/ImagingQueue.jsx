@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Edit2, CheckCircle, AlertCircle, Loader, ArrowLeft, RefreshCw } from 'lucide-react'
-import { getImagingOrders, createImagingResult, updateImagingResult } from '../api'
+import { Plus, Edit2, CheckCircle, AlertCircle, Loader, ArrowLeft, RefreshCw, Play } from 'lucide-react'
+import { getImagingOrders, createImagingResult, updateImagingResult, updateImagingOrder } from '../api'
 import './ImagingQueue.css'
 
 export default function ImagingQueue({ me, onBack }) {
@@ -12,6 +12,7 @@ export default function ImagingQueue({ me, onBack }) {
   const [resultForm, setResultForm] = useState({ findings: '', impression: '' })
   const [submitting, setSubmitting] = useState(false)
   const [filterStatus, setFilterStatus] = useState('ordered')
+  const [updatingOrder, setUpdatingOrder] = useState(null)
 
   useEffect(() => {
     loadOrders()
@@ -30,6 +31,20 @@ export default function ImagingQueue({ me, onBack }) {
       console.error(err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleMarkInProgress(orderId) {
+    setUpdatingOrder(orderId)
+    setError('')
+    try {
+      await updateImagingOrder(orderId, { status: 'in_progress' })
+      setSuccess('Imaging marked as in progress')
+      await loadOrders()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to update imaging status')
+    } finally {
+      setUpdatingOrder(null)
     }
   }
 
@@ -150,6 +165,17 @@ export default function ImagingQueue({ me, onBack }) {
                 </div>
 
                 <div className="card-actions">
+                  {order.status === 'ordered' && (
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      onClick={() => handleMarkInProgress(order.id)}
+                      disabled={updatingOrder === order.id}
+                      title="Mark this imaging as in progress"
+                    >
+                      <Play size={14} />
+                      {updatingOrder === order.id ? 'Updating...' : 'Start'}
+                    </button>
+                  )}
                   <button
                     className={`btn btn-sm ${order.status === 'ordered' ? 'btn-primary' : 'btn-secondary'}`}
                     onClick={() => {
