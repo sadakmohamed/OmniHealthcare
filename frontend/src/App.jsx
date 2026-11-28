@@ -66,6 +66,7 @@ import Consultants from './screens/Consultants'
 import Inpatients from './screens/Inpatients'
 import LabTests from './screens/LabTests'
 import Imaging from './screens/Imaging'
+import ImagingQueue from './screens/ImagingQueue'
 import ManageUsers from './screens/ManageUsers'
 import Medications from './screens/Medications'
 import Profile from './screens/Profile'
@@ -161,6 +162,7 @@ export default function App() {
     { id: 'encounters', label: 'Consultations', icon: Stethoscope, roles: ['admin', 'clinician'] },
     { id: 'messages', label: 'Messages', icon: Bell, roles: ['clinician'] },
     { id: 'laboratory', label: 'Laboratory', icon: HeartPulse, roles: ['admin', 'clinician', 'lab'] },
+    { id: 'imaging-queue', label: 'Imaging Queue', icon: HeartPulse, roles: ['admin', 'radiologist'] },
     { id: 'pharmacy', label: 'Pharmacy', icon: Pill, roles: ['admin', 'pharmacist'] },
     { id: 'referrals', label: 'Referrals', icon: Share2, roles: ['admin', 'clinician'] },
     { id: 'inpatients', label: 'Inpatients', icon: BedDouble, roles: ['admin', 'clinician', 'nurse'] },
@@ -352,6 +354,7 @@ export default function App() {
           {currentScreen === 'encounters' && <Encounters me={me} onNavigate={navigateTo} listFilters={filters} />}
           {currentScreen === 'messages' && <ClinicianMessages me={me} />}
           {currentScreen === 'laboratory' && <Laboratory me={me} />}
+          {currentScreen === 'imaging-queue' && <ImagingQueue me={me} onBack={() => setCurrentScreen('dashboard')} />}
           {currentScreen === 'pharmacy' && <Pharmacy me={me} />}
           {currentScreen === 'referrals' && <Referrals me={me} listFilters={filters} />}
           {currentScreen === 'inpatients' && (

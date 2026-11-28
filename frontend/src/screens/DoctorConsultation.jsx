@@ -34,7 +34,9 @@ import {
   getMedications,
   getAllAllergies,
   batchPrescribe,
-  getPrescriptions
+  getPrescriptions,
+  getImagingTests,
+  createImagingOrder
 } from '../api'
 
 export default function DoctorConsultation({ patient, me, onBack }) {
@@ -67,8 +69,16 @@ export default function DoctorConsultation({ patient, me, onBack }) {
     { test_name: '', price: 0 }
   ])
 
+  // Imaging Tests
+  const [imagingTests, setImagingTests] = useState([])
+  const [imagingOrders, setImagingOrders] = useState([])
+  const [imagingRows, setImagingRows] = useState([
+    { test_name: '', price: 0 }
+  ])
+
   const [savingHistory, setSavingHistory] = useState(false)
   const [orderingLabs, setOrderingLabs] = useState(false)
+  const [orderingImaging, setOrderingImaging] = useState(false)
   const [savingPrescriptions, setSavingPrescriptions] = useState(false)
 
   useEffect(() => {
@@ -89,14 +99,16 @@ export default function DoctorConsultation({ patient, me, onBack }) {
     setError('')
     try {
       // Find or create active encounter for this OPD patient
-      const [eRes, vRes, testsRes, medicationsRes, allergiesRes] = await Promise.all([
+      const [eRes, vRes, testsRes, imagingTestsRes, medicationsRes, allergiesRes] = await Promise.all([
         getEncounters({ patient: patient.id }),
         getVitals({ patient: patient.id }),
         getLabTests(),
+        getImagingTests(),
         getMedications(),
         getAllAllergies({ patient: patient.id })
       ])
       setLabTests(testsRes.data.filter((test) => test.active))
+      setImagingTests(imagingTestsRes.data.filter((test) => test.active))
       setMedications(medicationsRes.data)
       setAllergies(allergiesRes)
 
@@ -211,6 +223,33 @@ export default function DoctorConsultation({ patient, me, onBack }) {
     setInvestigations(updated)
   }
 
+  // Imaging Row Management
+  function addImagingRow() {
+    setImagingRows([
+      ...imagingRows,
+      { test_name: '', price: 0 }
+    ])
+  }
+
+  function removeImagingRow(index) {
+    if (imagingRows.length <= 1) {
+      setImagingRows([{ test_name: '', price: 0 }])
+      return
+    }
+    const updated = imagingRows.filter((_, i) => i !== index)
+    setImagingRows(updated)
+  }
+
+  function updateImagingRow(index, field, value) {
+    const updated = [...imagingRows]
+    if (field === 'test_name') {
+      const match = imagingTests.find((t) => t.name === value)
+      updated[index].test_name = value
+      updated[index].price = match ? match.price_cents / 100 : 0
+    }
+    setImagingRows(updated)
+  }
+
   // Submit Multiple Investigations and Auto-Bill
   async function handleOrderInvestigations(e) {
     e.preventDefault()
@@ -242,6 +281,40 @@ export default function DoctorConsultation({ patient, me, onBack }) {
       setError(err.response?.data?.detail || 'Failed to order investigations.')
     } finally {
       setOrderingLabs(false)
+    }
+  }
+
+  // Order Imaging Tests
+  async function handleOrderImaging(e) {
+    e.preventDefault()
+    const validTests = imagingRows.filter((it) => it.test_name.trim() !== '')
+    if (validTests.length === 0) {
+      setError('Please specify at least one imaging test.')
+      return
+    }
+
+    setOrderingImaging(true)
+    setError('')
+    try {
+      // Order each imaging test one by one
+      for (const test of validTests) {
+        const payload = {
+          patient: patient.id,
+          encounter: encounter ? encounter.id : null,
+          test_name: test.test_name,
+          price_cents: Math.round(test.price * 100)
+        }
+        await createImagingOrder(payload)
+      }
+      setSuccess(`${validTests.length} imaging test${validTests.length === 1 ? '' : 's'} ordered and sent for billing.`)
+
+      // Reset to one blank row
+      setImagingRows([{ test_name: '', price: 0 }])
+      setImagingOrders([])
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to order imaging tests.')
+    } finally {
+      setOrderingImaging(false)
     }
   }
 
@@ -609,6 +682,93 @@ export default function DoctorConsultation({ patient, me, onBack }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               <button type="submit" className="btn btn-primary" disabled={orderingLabs}>
                 {orderingLabs ? 'Ordering...' : 'Order tests'}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      {/* ── Section 3B: Imaging Tests with Dynamic Rows & Auto-Billing ── */}
+      <div className="panel" style={{ marginBottom: '20px' }}>
+        <div className="panel-header" style={{ background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h3>Imaging tests</h3>
+          </div>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={addImagingRow}>
+            <Plus size={15} /> Add Row
+          </button>
+        </div>
+
+        <form onSubmit={handleOrderImaging} className="panel-body">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {imagingRows.map((row, idx) => (
+              <div
+                key={idx}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  background: '#f8fafc',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--line)'
+                }}
+              >
+                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--muted)', width: '24px' }}>
+                  #{idx + 1}
+                </span>
+
+                <div style={{ flex: 1 }}>
+                  <select
+                    required
+                    value={row.test_name}
+                    onChange={(e) => updateImagingRow(idx, 'test_name', e.target.value)}
+                    style={{ width: '100%', height: '38px', borderRadius: '6px', border: '1px solid var(--line)', padding: '0 10px' }}
+                  >
+                    <option value="">Select an imaging test</option>
+                    {imagingTests.map((t) => (
+                      <option key={t.id} value={t.name}>
+                        {t.name} (${(t.price_cents / 100).toFixed(2)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  className="btn btn-danger btn-xs"
+                  onClick={() => removeImagingRow(idx)}
+                  title="Delete row"
+                  style={{ display: 'grid', placeItems: 'center', width: '32px', height: '32px' }}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginTop: '16px',
+              paddingTop: '12px',
+              borderTop: '1px solid var(--line)'
+            }}
+          >
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={addImagingRow}>
+                <Plus size={15} /> Add test
+              </button>
+              <span style={{ fontSize: '13px', color: 'var(--muted)' }}>
+                {imagingRows.length} test{imagingRows.length === 1 ? '' : 's'}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <button type="submit" className="btn btn-primary" disabled={orderingImaging}>
+                {orderingImaging ? 'Ordering...' : 'Order imaging'}
               </button>
             </div>
           </div>
