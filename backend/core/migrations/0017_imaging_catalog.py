@@ -12,12 +12,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='user',
-            name='RADIOLOGIST_choice',
-            field=models.CharField(choices=[('admin', 'Admin'), ('receptionist', 'Receptionist'), ('clinician', 'Clinician'), ('nurse', 'Nurse'), ('lab', 'Lab'), ('radiologist', 'Radiologist'), ('pharmacist', 'Pharmacist'), ('billing', 'Billing Admin'), ('patient', 'Patient')], default='admin', max_length=20),
-            preserve_default=False,
-        ),
         migrations.CreateModel(
             name='ImagingTest',
             fields=[
