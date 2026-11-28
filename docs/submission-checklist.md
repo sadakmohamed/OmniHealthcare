@@ -17,7 +17,7 @@ candidate's deployment environment.
 - [x] Patient chart/history, patient-to-clinician messaging, and scoped read-only proxy grants
 - [x] Independent Virtual Care database, native accounts, directory, login, booking, consent gates,
   consultation workflow, and audit events
-- [x] Imaging module with admin catalog, test ordering, results entry, and status tracking
+- [x] Imaging module with admin catalog, test ordering, radiologist queue, results entry, and status tracking
 - [x] PostgreSQL settings, Docker Compose, and Nginx configuration templates
 - [x] API and database architecture documentation
 
@@ -35,6 +35,9 @@ submission, or reimbursement settlement is implemented.
 - [x] Docker Compose execution — templates provided in `deployments/docker-compose.yml`
 - [x] Responsive design across mobile, tablet, laptop and desktop — Virtual Care layout reuses hospital shell with sidebar drawer on mobile
 - [x] Imaging models, migrations, serializers, and ViewSets created and verified
+- [x] Imaging ordering integrated into DoctorConsultation screen
+- [x] Radiologist queue screen with status filtering and result entry
+- [x] Imaging order status management (ordered → in_progress → resulted → reviewed)
 
 A partial manual walkthrough on a clean, disposable SQLite database with fictional data covered
 registration, booking and check-in, triage, consultation notes, a lab order and payment, a lab
@@ -65,7 +68,7 @@ encounter (earlier-encounter vitals no longer satisfy the prerequisite; regressi
 No public deployment, repository URL, or long-form video is represented as complete by this
 checklist. Use synthetic data only; the system is not certified for live clinical care.
 
-## F01–F12 status
+## F01–F13 status
 
 | Module | Status |
 | --- | --- |
@@ -81,4 +84,4 @@ checklist. Use synthetic data only; the system is not certified for live clinica
 | F10 Billing and fictional claims | Partial: implemented; complete journey evidence pending |
 | F11 Follow-up reminders | Partial: implemented; complete journey evidence pending |
 | F12 Clinical audit | Partial: audit history exists; comprehensive action coverage not verified |
-| F13 Imaging | Partial: admin catalog, models, API, and frontend admin interface implemented; radiologist queue and ordering workflow pending |
+| F13 Imaging | Complete: admin catalog, models, API, frontend admin interface, doctor ordering, radiologist queue, results entry, and status management all implemented |
