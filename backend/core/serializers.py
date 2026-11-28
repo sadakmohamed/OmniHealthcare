@@ -28,6 +28,9 @@ from .models import (
     DischargeNote,
     Encounter,
     FollowUp,
+    ImagingOrder,
+    ImagingResult,
+    ImagingTest,
     InpatientAdmission,
     InpatientDoctorNote,
     InpatientMedicationAdministration,
@@ -653,6 +656,68 @@ class LabResultSerializer(TenantSerializer):
 
     def get_is_current(self, obj):
         latest = obj.order.labresult_set.order_by("-created_at", "-pk").values_list("pk", flat=True).first()
+        return latest == obj.pk
+
+    def validate_status(self, value):
+        if value not in ("preliminary", "final"):
+            raise serializers.ValidationError("Result status must be preliminary or final.")
+        return value
+
+
+class ImagingTestSerializer(TenantSerializer):
+    class Meta:
+        model = ImagingTest
+        fields = ["id", "name", "description", "price_cents", "active", "created_at", "updated_at"]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate_price_cents(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Price must be greater than zero.")
+        return value
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        name = attrs.get("name", self.instance.name if self.instance else "").strip()
+        if not name:
+            raise serializers.ValidationError({"name": "Name cannot be empty."})
+        org = self.context.get("organization") or (self.instance.organization if self.instance else None)
+        if org:
+            matches = ImagingTest.objects.filter(organization=org, name__iexact=name)
+            if self.instance:
+                matches = matches.exclude(pk=self.instance.pk)
+            if matches.exists():
+                raise serializers.ValidationError({"name": "An imaging test with this name already exists."})
+        return attrs
+
+
+class ImagingOrderSerializer(TenantSerializer):
+    care_type = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ImagingOrder
+        fields = "__all__"
+        read_only_fields = ["organization", "created_at", "updated_at", "ordered_by", "bill"]
+
+    def get_care_type(self, obj):
+        return "ipd" if obj.admission_id else "opd"
+
+
+class ImagingResultSerializer(TenantSerializer):
+    care_type = serializers.SerializerMethodField()
+    test_name = serializers.CharField(source="order.test_name", read_only=True)
+    order_status = serializers.CharField(source="order.status", read_only=True)
+    is_current = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ImagingResult
+        fields = "__all__"
+        read_only_fields = ["organization", "created_at", "updated_at", "entered_by"]
+
+    def get_care_type(self, obj):
+        return "ipd" if obj.order.admission_id else "opd"
+
+    def get_is_current(self, obj):
+        latest = obj.order.imagingresult_set.order_by("-created_at", "-pk").values_list("pk", flat=True).first()
         return latest == obj.pk
 
     def validate_status(self, value):

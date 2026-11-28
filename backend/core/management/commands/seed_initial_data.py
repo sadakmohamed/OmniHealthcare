@@ -23,6 +23,9 @@ from core.models import (
     DischargeNote,
     Encounter,
     FollowUp,
+    ImagingOrder,
+    ImagingResult,
+    ImagingTest,
     InpatientAdmission,
     LabOrder,
     LabResult,
@@ -72,6 +75,7 @@ STAFF_ROLES = [
     ("receptionist", "Reception",   "Staff"),
     ("nurse",        "Nurse",       "Wanjiru"),
     ("lab",          "Lab",         "Tech"),
+    ("radiologist",  "Radiology",   "Tech"),
     ("pharmacist",   "Pharmacy",    "Staff"),
     ("billing",      "Billing",     "Admin"),
 ]
@@ -106,6 +110,17 @@ LAB_TESTS = [
     ("Liver Function Tests",           "ALT 7–56 U/L"),
     ("Renal Function Tests",           "Creatinine 62–115 µmol/L"),
     ("Thyroid Stimulating Hormone",    "0.4–4.0 mIU/L"),
+]
+
+IMAGING_TESTS = [
+    ("Chest X-ray",                 "Plain radiograph of chest",           5000),
+    ("Neck Ultrasound",             "Ultrasound evaluation of neck",       10000),
+    ("Abdominal Ultrasound",        "Ultrasound of abdomen and pelvis",    12000),
+    ("Pelvic Ultrasound",           "Ultrasound of pelvis",                10000),
+    ("Thyroid Ultrasound",          "Ultrasound of thyroid gland",         8000),
+    ("Cardiac Echocardiogram",      "Echocardiography of heart",           15000),
+    ("Cranial CT Scan",             "Computed tomography of head",         20000),
+    ("Abdominal CT Scan",           "Computed tomography of abdomen",      18000),
 ]
 
 MEDICATIONS = [
@@ -173,6 +188,10 @@ class Command(BaseCommand):
         LabTest.objects.bulk_create([
             LabTest(organization=org, name=name, price_cents=2500)
             for name, _ in LAB_TESTS
+        ])
+        ImagingTest.objects.bulk_create([
+            ImagingTest(organization=org, name=name, description=desc, price_cents=price)
+            for name, desc, price in IMAGING_TESTS
         ])
         Medication.objects.bulk_create([
             Medication(organization=org, name=name)

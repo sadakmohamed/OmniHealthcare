@@ -65,6 +65,7 @@ import DoctorConsultation from './screens/DoctorConsultation'
 import Consultants from './screens/Consultants'
 import Inpatients from './screens/Inpatients'
 import LabTests from './screens/LabTests'
+import Imaging from './screens/Imaging'
 import ManageUsers from './screens/ManageUsers'
 import Medications from './screens/Medications'
 import Profile from './screens/Profile'
@@ -175,6 +176,7 @@ export default function App() {
     { id: 'users', label: 'User Accounts', icon: Users },
     { id: 'profile', label: 'My Profile', icon: User },
     { id: 'lab-tests', label: 'Lab Tests', icon: HeartPulse },
+    { id: 'imaging', label: 'Imaging Tests', icon: HeartPulse },
     { id: 'medications', label: 'Medications', icon: Pill },
     { id: 'audit', label: 'Audit History', icon: ShieldCheck }
   ]
@@ -316,6 +318,7 @@ export default function App() {
                   handleLogout()
                 }} />}
                 {adminTab === 'lab-tests' && <LabTests />}
+                {adminTab === 'imaging' && <Imaging />}
                 {adminTab === 'medications' && <Medications />}
                 {adminTab === 'audit' && <AuditHistory me={me} listFilters={filters} />}
               </div>

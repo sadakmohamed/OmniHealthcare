@@ -24,6 +24,7 @@ class User(AbstractUser):
         CLINICIAN = "clinician", "Clinician"
         NURSE = "nurse", "Nurse"
         LAB = "lab", "Lab"
+        RADIOLOGIST = "radiologist", "Radiologist"
         PHARMACIST = "pharmacist", "Pharmacist"
         BILLING = "billing", "Billing Admin"
         PATIENT = "patient", "Patient"
@@ -329,6 +330,69 @@ class LabResult(TenantModel):
     amended_from = models.ForeignKey(
         "self", null=True, blank=True, on_delete=models.PROTECT
     )
+
+
+class ImagingTest(TenantModel):
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    price_cents = models.PositiveIntegerField()
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["organization", "name"], name="unique_org_imaging_test_name"),
+        ]
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class ImagingOrder(TenantModel):
+    class Status(models.TextChoices):
+        AWAITING_PAYMENT = "awaiting_payment", "Awaiting Payment"
+        ORDERED = "ordered", "Ordered"
+        IN_PROGRESS = "in_progress", "In Progress"
+        RESULTED = "resulted", "Result entered"
+        REVIEWED = "reviewed", "Reviewed"
+        CANCELLED = "cancelled", "Cancelled"
+
+    encounter = models.ForeignKey(
+        Encounter, null=True, blank=True, on_delete=models.SET_NULL
+    )
+    admission = models.ForeignKey(
+        "InpatientAdmission", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="imaging_orders",
+    )
+    patient = models.ForeignKey(Patient, on_delete=models.PROTECT)
+    test_name = models.CharField(max_length=200)
+    price_cents = models.PositiveIntegerField(default=10000)
+    bill = models.ForeignKey(
+        "Bill", null=True, blank=True, on_delete=models.PROTECT, related_name="imaging_orders"
+    )
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.ORDERED
+    )
+    ordered_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.test_name} - {self.patient}"
+
+
+class ImagingResult(TenantModel):
+    order = models.ForeignKey(ImagingOrder, on_delete=models.PROTECT)
+    patient = models.ForeignKey(Patient, on_delete=models.PROTECT)
+    findings = models.TextField()
+    impression = models.TextField(blank=True)
+    status = models.CharField(max_length=20, default="preliminary")
+    entered_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    amended_from = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.PROTECT
+    )
+
+    def __str__(self):
+        return f"Result for {self.order.test_name}"
 
 
 class Prescription(TenantModel):

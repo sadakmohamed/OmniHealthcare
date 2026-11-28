@@ -2046,6 +2046,147 @@ class LabResultViewSet(TenantViewSet):
         )
 
 
+class ImagingTestViewSet(TenantViewSet):
+    queryset = ImagingTest.objects.all().order_by("name")
+    serializer_class = ImagingTestSerializer
+    http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if not self.request.user.is_authenticated:
+            return qs.none()
+        if self.request.user.role != "admin":
+            qs = qs.filter(active=True)
+        return qs
+
+    def perform_create(self, serializer):
+        if self.request.user.role != "admin":
+            raise PermissionDenied("Only administrators can create imaging tests.")
+        serializer.save(organization=self.request.user.organization)
+        self._audit_change(serializer.instance, "imaging.test.created")
+
+    def perform_update(self, serializer):
+        if self.request.user.role != "admin":
+            raise PermissionDenied("Only administrators can update imaging tests.")
+        serializer.save()
+        self._audit_change(serializer.instance, "imaging.test.updated")
+
+    def perform_destroy(self, instance):
+        if self.request.user.role != "admin":
+            raise PermissionDenied("Only administrators can delete imaging tests.")
+        self._audit_change(instance, "imaging.test.inactivated")
+        instance.active = False
+        instance.save()
+
+
+class ImagingOrderViewSet(TenantViewSet):
+    queryset = ImagingOrder.objects.all().order_by("-created_at")
+    serializer_class = ImagingOrderSerializer
+    http_method_names = ["get", "post", "head", "options"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        patient_id = self.request.query_params.get("patient")
+        encounter_id = self.request.query_params.get("encounter")
+        admission_id = self.request.query_params.get("admission")
+        if patient_id:
+            qs = qs.filter(patient_id=patient_id)
+        if encounter_id:
+            qs = qs.filter(encounter_id=encounter_id)
+        if admission_id:
+            qs = qs.filter(admission_id=admission_id)
+        if self.request.user.role == "radiologist":
+            qs = qs.filter(status=ImagingOrder.Status.ORDERED).filter(
+                Q(bill__isnull=True) | Q(bill__status="paid")
+            )
+        return qs
+
+    def perform_create(self, serializer):
+        if self.request.user.role not in ("clinician", "admin"):
+            raise PermissionDenied("Only clinicians may order imaging.")
+        patient = serializer.validated_data["patient"]
+        encounter = serializer.validated_data.get("encounter")
+        if patient.organization_id != self.request.user.organization_id:
+            raise ValidationError({"patient": "Patient must belong to your organization."})
+        if encounter and (
+            encounter.organization_id != patient.organization_id or encounter.patient_id != patient.id
+        ):
+            raise ValidationError({"encounter": "Encounter must belong to the selected patient and organization."})
+        admission = serializer.validated_data.get("admission")
+        if admission and (
+            admission.organization_id != patient.organization_id or admission.patient_id != patient.id
+        ):
+            raise ValidationError({"admission": "Admission must belong to the selected patient and organization."})
+        if self.request.user.role == "clinician" and encounter:
+            if (
+                encounter.clinician.user_id != self.request.user.id or
+                patient.assigned_clinician_id != encounter.clinician_id
+            ):
+                raise PermissionDenied("You can only order imaging for patients assigned to you.")
+        import uuid
+        with transaction.atomic():
+            catalog_test = ImagingTest.objects.select_for_update().filter(
+                organization=self.request.user.organization,
+                name__iexact=serializer.validated_data["test_name"].strip(),
+            ).first()
+            if not catalog_test or not catalog_test.active:
+                raise ValidationError({"test_name": "Select an active imaging test from the catalog."})
+            price = catalog_test.price_cents
+            bill = Bill.objects.create(
+                organization=self.request.user.organization,
+                patient=patient,
+                encounter=encounter,
+                invoice_number=f"INV-IMG-{uuid.uuid4().hex[:10].upper()}",
+                items=[{
+                    "description": f"Imaging: {serializer.validated_data['test_name']}",
+                    "amount_cents": price,
+                }],
+                total_cents=price,
+                status="unpaid",
+            )
+            order = serializer.save(
+                organization=self.request.user.organization,
+                ordered_by=self.request.user,
+                test_name=catalog_test.name,
+                price_cents=price,
+                status=ImagingOrder.Status.AWAITING_PAYMENT,
+                bill=bill,
+            )
+            self._audit_change(order, "imaging.ordered", {"bill_id": str(bill.pk)})
+
+
+class ImagingResultViewSet(TenantViewSet):
+    queryset = ImagingResult.objects.all().order_by("-created_at")
+    serializer_class = ImagingResultSerializer
+    http_method_names = ["get", "post", "head", "options"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.request.query_params.get("order"):
+            qs = qs.filter(order_id=self.request.query_params["order"])
+        if self.request.query_params.get("patient"):
+            qs = qs.filter(patient_id=self.request.query_params["patient"])
+        return qs
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        if self.request.user.role not in ("radiologist", "admin"):
+            raise PermissionDenied("Only radiologists may enter imaging results.")
+        order = serializer.validated_data["order"]
+        patient = serializer.validated_data["patient"]
+        if patient.organization_id != self.request.user.organization_id:
+            raise ValidationError({"patient": "Patient must belong to your organization."})
+        if order.patient_id != patient.id or order.organization_id != self.request.user.organization_id:
+            raise ValidationError({"order": "Order must belong to the selected patient and organization."})
+        result = serializer.save(
+            organization=self.request.user.organization,
+            entered_by=self.request.user,
+        )
+        order.status = ImagingOrder.Status.RESULTED
+        order.save()
+        self._audit_change(result, "imaging.result.entered", {"order_id": str(order.pk)})
+
+
 class PrescriptionViewSet(TenantViewSet):
     queryset = Prescription.objects.all().order_by("-created_at")
     serializer_class = PrescriptionSerializer
